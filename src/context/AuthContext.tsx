@@ -81,7 +81,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         const newProfile: UserProfile = {
           uid: currentUser.uid,
-          email: currentUser.email,
+          email: currentUser.email || '',
           displayName: pendingDisplayName || currentUser.displayName || 'Medic Member',
           photoURL: currentUser.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(pendingDisplayName || currentUser.displayName || 'Medic')}`,
           phoneNumber: pendingPhoneNumber || '',
@@ -155,7 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       const profileData: UserProfile = {
         uid: currentUser.uid,
-        email: currentUser.email,
+        email: currentUser.email || email,
         displayName,
         phoneNumber,
         phoneVerified: false,
