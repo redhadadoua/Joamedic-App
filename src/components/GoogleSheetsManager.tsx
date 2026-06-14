@@ -57,11 +57,11 @@ export default function GoogleSheetsManager() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [config, setConfig] = useState<SheetsConfig>({
-    spreadsheetId: null,
-    spreadsheetUrl: null,
-    spreadsheetTitle: null,
-    webAppUrl: null,
-    autoSyncOrders: false,
+    spreadsheetId: '1qbqMGXqA_HPFpYvpjn2XPJNKwnfXQRscrXKkxDMBR8M',
+    spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1qbqMGXqA_HPFpYvpjn2XPJNKwnfXQRscrXKkxDMBR8M/edit',
+    spreadsheetTitle: 'joamedic',
+    webAppUrl: 'https://script.google.com/macros/s/AKfycbxfimh_5IRjnTlnXW_v9SJ9uQ5gqzcWlUe-bw5YjXLB6YCjTIiahFgvOjd0g6A5wpXGFQ/exec',
+    autoSyncOrders: true,
     lastSyncedAt: null,
   });
   
@@ -89,11 +89,34 @@ export default function GoogleSheetsManager() {
       try {
         const docRef = doc(db, 'settings', 'google_sheets');
         const docSnap = await getDoc(docRef);
+        const defaultConfig: SheetsConfig = {
+          spreadsheetId: '1qbqMGXqA_HPFpYvpjn2XPJNKwnfXQRscrXKkxDMBR8M',
+          spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1qbqMGXqA_HPFpYvpjn2XPJNKwnfXQRscrXKkxDMBR8M/edit',
+          spreadsheetTitle: 'joamedic',
+          webAppUrl: 'https://script.google.com/macros/s/AKfycbxfimh_5IRjnTlnXW_v9SJ9uQ5gqzcWlUe-bw5YjXLB6YCjTIiahFgvOjd0g6A5wpXGFQ/exec',
+          autoSyncOrders: true,
+          lastSyncedAt: null,
+        };
+
         if (docSnap.exists()) {
-          const loadedConfig = docSnap.data() as SheetsConfig;
-          setConfig(loadedConfig);
-          if (loadedConfig.webAppUrl) {
-            setWebAppUrlInput(loadedConfig.webAppUrl);
+          const loadedData = docSnap.data();
+          const mergedConfig: SheetsConfig = {
+            spreadsheetId: loadedData.spreadsheetId || defaultConfig.spreadsheetId,
+            spreadsheetUrl: loadedData.spreadsheetUrl || defaultConfig.spreadsheetUrl,
+            spreadsheetTitle: loadedData.spreadsheetTitle || defaultConfig.spreadsheetTitle,
+            webAppUrl: loadedData.webAppUrl || defaultConfig.webAppUrl,
+            autoSyncOrders: loadedData.autoSyncOrders !== undefined ? loadedData.autoSyncOrders : defaultConfig.autoSyncOrders,
+            lastSyncedAt: loadedData.lastSyncedAt || null,
+          };
+          setConfig(mergedConfig);
+          setWebAppUrlInput(mergedConfig.webAppUrl || '');
+        } else {
+          setConfig(defaultConfig);
+          setWebAppUrlInput(defaultConfig.webAppUrl || '');
+          try {
+            await setDoc(docRef, defaultConfig);
+          } catch (writeErr) {
+            console.warn("Could not write default sheets config to Firestore (might be offline):", writeErr);
           }
         }
       } catch (err) {

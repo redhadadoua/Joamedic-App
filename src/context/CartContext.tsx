@@ -118,21 +118,28 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString()
     };
 
-    // 1. Fetch Google Sheets Webhook URL first in the background
-    let webAppUrl: string | null = localStorage.getItem('cached_sheets_webapp_url');
+    // 1. Fetch Google Sheets Webhook URL first in the background with a strict 800ms timeout
+    const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxfimh_5IRjnTlnXW_v9SJ9uQ5gqzcWlUe-bw5YjXLB6YCjTIiahFgvOjd0g6A5wpXGFQ/exec';
+    let webAppUrl: string = DEFAULT_WEBHOOK_URL;
+    
     try {
-      const sheetsDoc = await getDoc(doc(db, 'settings', 'google_sheets'));
+      const getDocPromise = getDoc(doc(db, 'settings', 'google_sheets'));
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 800));
+      const sheetsDoc = await Promise.race([getDocPromise, timeoutPromise]);
       if (sheetsDoc && sheetsDoc.exists()) {
         const sheetsData = sheetsDoc.data();
-        webAppUrl = sheetsData.webAppUrl || null;
-        if (webAppUrl) {
+        if (sheetsData.webAppUrl) {
+          webAppUrl = sheetsData.webAppUrl;
           localStorage.setItem('cached_sheets_webapp_url', webAppUrl);
         }
+      } else {
+        const cached = localStorage.getItem('cached_sheets_webapp_url');
+        if (cached) webAppUrl = cached;
       }
     } catch (configErr) {
       console.warn("Could not load google sheets configuration from Firestore, attempting local fallback:", configErr);
-      webAppUrl = localStorage.getItem('cached_sheets_webapp_url');
-      // We do not throw or call handleFirestoreError here to prevent blocking offline checkouts.
+      const cached = localStorage.getItem('cached_sheets_webapp_url');
+      if (cached) webAppUrl = cached;
     }
 
     // 2. Backup write to localStorage immediately so it is instantly available in order history
@@ -147,10 +154,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('backup_orders', JSON.stringify(existingLocalOrders));
     }
 
-    // 3. Await Firestore document creation to guarantee security & absolute persistence on the server
+    // 3. Await Firestore document creation with a 1.5s timeout.
+    // Firestore has offline capabilities, so if it takes too long, we let it process in the background.
     onProgress?.('firestore');
     try {
-      await setDoc(doc(db, 'orders', generatedOrderId), {
+      const setDocPromise = setDoc(doc(db, 'orders', generatedOrderId), {
         ...orderData,
         items: cartItems.map(item => ({ 
           id: item.id, 
@@ -162,12 +170,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })),
         createdAt: serverTimestamp() // Genuine Firestore serverTimestamp for db integrity
       });
+      
+      const timeoutPromise = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 1500));
+      const raceRes = await Promise.race([setDocPromise, timeoutPromise]);
+      if (raceRes === 'timeout') {
+        console.warn("Firestore order took more than 1.5 seconds. Proceeding to Google Sheets sync in parallel.");
+      }
     } catch (firestoreErr: any) {
-      console.error("Firestore order placement error:", firestoreErr);
-      handleFirestoreError(firestoreErr, OperationType.WRITE, `orders/${generatedOrderId}`);
+      console.warn("Firestore non-blocking write warning, proceeding to sheets synchronization:", firestoreErr);
+      // We don't block the purchase flow on database sync warnings
     }
 
-    // 4. If a Google Sheets webhook exists, append the order details immediately to Google Sheets without silent failures (robust 3-attempt retry)
+    // 4. Force direct sync to the Google Sheets spreadsheet using the webAppUrl (always fully available)
     if (webAppUrl) {
       onProgress?.('google_sheets');
       try {
@@ -200,11 +214,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         for (let i = 0; i < attempts; i++) {
           try {
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 6000); // 6s timeout per retry
+
             webhookRes = await fetch(webAppUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'text/plain' },
-              body: JSON.stringify({ action: 'add_order', data: [newOrderRow] })
+              body: JSON.stringify({ action: 'add_order', data: [newOrderRow] }),
+              signal: controller.signal
             });
+            clearTimeout(fetchTimeout);
 
             if (!webhookRes.ok) {
               throw new Error(`Google Web App returned status ${webhookRes.status}`);
@@ -225,7 +244,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn(`Google Sheets synchronization attempt ${i + 1} of ${attempts} failed:`, err);
             finalErr = err;
             if (i < attempts - 1) {
-              await new Promise(resolve => setTimeout(resolve, 1200)); // wait 1.2s before automatic retry
+              await new Promise(resolve => setTimeout(resolve, 800)); // wait 0.8s before automatic retry
             }
           }
         }
@@ -235,7 +254,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (webhookErr: any) {
         console.error("Sheets webhook preparation/trigger error:", webhookErr);
-        throw new Error(`Google Sheets integration failed: ${webhookErr?.message || webhookErr}`);
+        throw new Error(`Google Sheets integration error: ${webhookErr?.message || webhookErr}`);
       }
     }
 
