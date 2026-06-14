@@ -119,16 +119,20 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 1. Fetch Google Sheets Webhook URL first in the background
-    let webAppUrl: string | null = null;
+    let webAppUrl: string | null = localStorage.getItem('cached_sheets_webapp_url');
     try {
       const sheetsDoc = await getDoc(doc(db, 'settings', 'google_sheets'));
       if (sheetsDoc && sheetsDoc.exists()) {
         const sheetsData = sheetsDoc.data();
         webAppUrl = sheetsData.webAppUrl || null;
+        if (webAppUrl) {
+          localStorage.setItem('cached_sheets_webapp_url', webAppUrl);
+        }
       }
     } catch (configErr) {
-      console.warn("Could not load google sheets configuration:", configErr);
-      handleFirestoreError(configErr, OperationType.GET, 'settings/google_sheets');
+      console.warn("Could not load google sheets configuration from Firestore, attempting local fallback:", configErr);
+      webAppUrl = localStorage.getItem('cached_sheets_webapp_url');
+      // We do not throw or call handleFirestoreError here to prevent blocking offline checkouts.
     }
 
     // 2. Backup write to localStorage immediately so it is instantly available in order history
