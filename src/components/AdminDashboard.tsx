@@ -1324,7 +1324,7 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
   // Manage Order State
   const [managingOrder, setManagingOrder] = useState<DbOrder | null>(null);
 
-  const syncOrdersFromGoogleSheet = async (currentOrders: DbOrder[]) => {
+  const syncOrdersFromGoogleSheet = async (currentOrders: DbOrder[], isManual: boolean = false) => {
     try {
       setSheetsSyncing(true);
       setSheetsSyncError(null);
@@ -1462,10 +1462,11 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
       }, 5000);
     } catch (err: any) {
       console.warn("Spreadsheet parsing/automatic sync bypass alert:", err);
-      setSheetsSyncError(err?.message || "Unavailable connection.");
-      setTimeout(() => {
-        setSheetsSyncError(null);
-      }, 5000);
+      if (isManual) {
+        setSheetsSyncError(err?.message || "Unavailable connection.");
+      } else {
+        console.log("Silent background spreadsheet sync skipped/unauthorized (expected when Google Sheet is private or unshared).");
+      }
     } finally {
       setSheetsSyncing(false);
     }
@@ -1482,10 +1483,10 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
       setOrders(list);
       setLoading(false);
 
-      // Trigger automatic background Google Sheet alignment check on load!
+      // Trigger automatic background Google Sheet alignment check on load! (Silent)
       if (isInitialLoad && list.length > 0) {
         isInitialLoad = false;
-        syncOrdersFromGoogleSheet(list);
+        syncOrdersFromGoogleSheet(list, false);
       }
     }, (err) => {
       console.error("Error watching live orders list:", err);
@@ -1493,7 +1494,7 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
         const list: DbOrder[] = [];
         snap.forEach(d => list.push({ id: d.id, ...d.data() } as DbOrder));
         setOrders(list);
-        syncOrdersFromGoogleSheet(list);
+        syncOrdersFromGoogleSheet(list, false);
       }).finally(() => setLoading(false));
     });
 
@@ -1556,7 +1557,7 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
           )}
           {sheetsSyncError && (
             <div className="text-xs px-3 py-1.5 rounded-xl font-medium bg-red-500/10 border border-red-500/20 text-red-300 font-mono">
-              <span>⚠ FETCH DISRUPTED: {sheetsSyncError}</span>
+              <span>⚠ GOOGLE SHEET BLOCKED/UNAUTHORIZED</span>
             </div>
           )}
           <button 
@@ -1570,8 +1571,8 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
                   list.push({ id: docSnap.id, ...docSnap.data() } as DbOrder);
                 });
                 setOrders(list);
-                // Also trigger spreadsheets direct reconciliation sync!
-                await syncOrdersFromGoogleSheet(list);
+                // Trigger spreadsheets explicit manual reconciliation sync
+                await syncOrdersFromGoogleSheet(list, true);
               } catch (err) {
                 console.error("Manual refresh of orders failed:", err);
               } finally {
@@ -1586,6 +1587,47 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
           </button>
         </div>
       </div>
+
+      {/* Google Sheets Privacy Hand-Held Resolution Guide */}
+      {sheetsSyncError && (
+        <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-5 text-white space-y-4 backdrop-blur-md relative overflow-hidden transition-all duration-500 animate-fadeIn">
+          <div className="absolute right-0 top-0 w-24 h-24 bg-red-500/5 blur-2xl rounded-full"></div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 flex items-center justify-center shrink-0">
+                <FileSpreadsheet size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-semibold text-red-300">Google Sheet Shared Access Required</h4>
+                <p className="text-xs text-white/60 mt-1 leading-relaxed">
+                  Google Drive treats new spreadsheets as "Restricted" (private). To sync spreadsheet orders back into Joamedic's Admin Dashboard, please update the permissions:
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSheetsSyncError(null)}
+              className="text-white/40 hover:text-white px-2 py-1 rounded text-[10px] uppercase font-mono tracking-wider hover:bg-white/5 transition-all cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs text-white/70 pt-2 border-t border-white/5">
+            <div className="space-y-1">
+              <p className="font-bold text-white flex items-center gap-1.5 font-sans"><span className="text-red-400 font-mono">1.</span> Open Google Sheet</p>
+              <p className="text-[11px] text-white/50 leading-relaxed">Go to Google Drive, and open the sheet "joamedic" or your linked spreadsheet ID.</p>
+            </div>
+            <div className="space-y-1">
+              <p className="font-bold text-white flex items-center gap-1.5 font-sans"><span className="text-red-400 font-mono">2.</span> Click "Share"</p>
+              <p className="text-[11px] text-white/50 leading-relaxed">Click the blue <strong>"Share"</strong> button (top right). Change "General access" from "Restricted" to <span className="text-teal-300">"Anyone with the link can view"</span>.</p>
+            </div>
+            <div className="space-y-1">
+              <p className="font-bold text-white flex items-center gap-1.5 font-sans"><span className="text-red-400 font-mono">3.</span> Create "Orders" tab</p>
+              <p className="text-[11px] text-white/50 leading-relaxed">Ensure there is a tab named exactly <strong>"Orders"</strong>, then press the <strong>"Refresh & Sync Sheets"</strong> button again!</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
