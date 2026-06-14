@@ -1521,6 +1521,13 @@ function UsersManager() {
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [assigningBadgeUid, setAssigningBadgeUid] = useState<string | null>(null);
+  const [customBadgeText, setCustomBadgeText] = useState('');
+  const [customBadgeColor, setCustomBadgeColor] = useState('teal');
+
   const [newUser, setNewUser] = useState({
     displayName: '',
     email: '',
@@ -1572,6 +1579,50 @@ function UsersManager() {
     }
   };
 
+  // Block User Action
+  const handleToggleBlock = async (targetUser: DbUser) => {
+    try {
+      const newBlockState = !targetUser.isBlocked;
+      const userRef = doc(db, 'users', targetUser.uid);
+      await updateDoc(userRef, { isBlocked: newBlockState });
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error toggling block state:', err);
+      alert('Error modifying block status: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  // Suspend User Action
+  const handleToggleSuspend = async (targetUser: DbUser) => {
+    try {
+      const newSuspendState = !targetUser.isSuspended;
+      const userRef = doc(db, 'users', targetUser.uid);
+      await updateDoc(userRef, { isSuspended: newSuspendState });
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error toggling suspend state:', err);
+      alert('Error modifying suspension status: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  // Save Verification Badge Properties
+  const handleUpdateVerification = async (uid: string, verified: boolean, title: string = '', badgeColor: string = 'teal') => {
+    try {
+      const userRef = doc(db, 'users', uid);
+      await updateDoc(userRef, {
+        isVerified: verified,
+        verificationTitle: verified ? title : '',
+        customBadgeColor: verified ? badgeColor : ''
+      });
+      setAssigningBadgeUid(null);
+      setCustomBadgeText('');
+      await fetchUsers();
+    } catch (err) {
+      console.error('Error writing verification badge:', err);
+      alert('Failed updating user verification credentials: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   const handleDeleteUser = async (uid: string) => {
     if (window.confirm('Are you sure you want to permanently delete this clinical user?')) {
       try {
@@ -1597,6 +1648,9 @@ function UsersManager() {
         phoneNumber: newUser.phoneNumber,
         phoneVerified: true,
         role: newUser.role,
+        isBlocked: false,
+        isSuspended: false,
+        isVerified: false,
         createdAt: new Date().toISOString()
       };
       await setDoc(userRef, profile);
@@ -1609,29 +1663,99 @@ function UsersManager() {
     }
   };
 
+  // Advanced Filtering logic
+  const filteredUsers = users.filter((u) => {
+    // 1. Text Search query
+    const matchSearch = 
+      (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (u.phoneNumber || '').includes(searchQuery);
+
+    // 2. Role filter match
+    const matchRole = 
+      roleFilter === 'all' || 
+      (roleFilter === 'admin' && u.role === 'admin') || 
+      (roleFilter === 'user' && u.role !== 'admin');
+
+    // 3. Status filter match
+    let matchStatus = true;
+    if (statusFilter === 'blocked') matchStatus = !!u.isBlocked;
+    else if (statusFilter === 'suspended') matchStatus = !!u.isSuspended;
+    else if (statusFilter === 'verified') matchStatus = !!u.isVerified;
+    else if (statusFilter === 'active') matchStatus = !u.isBlocked && !u.isSuspended;
+
+    return matchSearch && matchRole && matchStatus;
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-6">
+      {/* Overview Block with Controls */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-6">
         <div>
           <h2 className="text-xl font-display font-semibold flex items-center gap-2">
-            <Users size={22} className="text-teal-400" /> User Directory
+            <Users size={22} className="text-teal-400" /> User & Personnel Directory
           </h2>
-          <p className="text-white/50 text-xs mt-1">Manage, promote, and prune professional medical team accounts.</p>
+          <p className="text-white/50 text-xs mt-1">Manage, promote, block, suspend, verify, and badge registered medical client profiles.</p>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-2 shrink-0 w-full md:w-auto">
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-1.5 bg-teal-500 text-black px-4 py-2 rounded-xl text-xs font-bold hover:bg-teal-400 transition-colors uppercase tracking-wider animate-pulse"
+            className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-teal-500 text-black px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-teal-400 transition-all uppercase tracking-wider shadow-lg shadow-teal-500/10"
           >
             <Plus size={14} /> Add User
           </button>
           <button
             onClick={handleSeedUsersAndOrders}
             disabled={seeding}
-            className="flex items-center gap-1.5 bg-white/10 border border-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-wider disabled:opacity-50"
+            className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-white/10 border border-white/10 hover:bg-white/20 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider disabled:opacity-50"
           >
-            {seeding ? 'Seeding...' : 'Seed Test Data'}
+            {seeding ? 'Seeding...' : 'Seed Test Users'}
           </button>
+        </div>
+      </div>
+
+      {/* Advanced Filter Toolbar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white/5 border border-white/10 rounded-xl p-4">
+        {/* Search Input */}
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+          <input
+            type="text"
+            placeholder="Search by name, email, phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-900 border border-white/10 rounded-xl py-2 pl-9 pr-4 text-xs focus:outline-none focus:border-teal-400/50 transition-colors placeholder:text-white/30 text-white"
+          />
+        </div>
+
+        {/* Role Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-white/40 uppercase tracking-wider font-bold">Privilege:</span>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="flex-1 bg-slate-900 border border-white/10 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-400/50 text-white"
+          >
+            <option value="all">All Roles</option>
+            <option value="admin">Administrators Only</option>
+            <option value="user">Registered Clients Only</option>
+          </select>
+        </div>
+
+        {/* Status filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-white/40 uppercase tracking-wider font-bold">Status:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="flex-1 bg-slate-900 border border-white/10 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-teal-400/50 text-white"
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active (Unblocked)</option>
+            <option value="blocked">Blocked Accounts</option>
+            <option value="suspended">Suspended Accounts</option>
+            <option value="verified">Verified Doctor Badges</option>
+          </select>
         </div>
       </div>
 
@@ -1639,64 +1763,180 @@ function UsersManager() {
         <div className="flex items-center justify-center py-20">
           <Loader className="text-teal-400 animate-spin" size={32} />
         </div>
-      ) : users.length === 0 ? (
+      ) : filteredUsers.length === 0 ? (
         <div className="bg-white/5 border border-white/10 rounded-2xl p-12 text-center text-white/40 flex flex-col items-center justify-center gap-4">
-          <Users size={40} className="text-white/20 animate-pulse" />
+          <Users size={40} className="text-white/20" />
           <div>
-            <p className="text-sm font-medium mb-1">No registered users in high-performance database.</p>
-            <p className="text-xs text-white/40 max-w-sm mx-auto">Initialize verified personnel profiles to begin auditing workflows.</p>
+            <p className="text-sm font-semibold text-white/80">No matches found.</p>
+            <p className="text-xs text-white/40 max-w-sm mx-auto mt-1">Adjust your filters above or populate sample profiles to audit user attributes.</p>
           </div>
-          <button
-            onClick={handleSeedUsersAndOrders}
-            disabled={seeding}
-            className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-xl text-xs uppercase tracking-wider transition-all"
-          >
-            {seeding ? 'Seeding...' : 'Populate Firestore with Sample Users'}
-          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {users.map((u, i) => (
-            <div key={u.uid || i} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-white/5 border border-white/10 rounded-xl hover:border-white/20 transition-all gap-4">
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-base bg-teal-500/20 text-teal-300 border border-teal-500/30`}>
+          {filteredUsers.map((u, i) => (
+            <div key={u.uid || i} className="flex flex-col xl:flex-row xl:items-center justify-between p-5 bg-white/5 border border-white/10 rounded-xl hover:bg-slate-900/50 transition-all gap-4">
+              <div className="flex items-start sm:items-center gap-4">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-base shrink-0 border ${
+                  u.isBlocked ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                  u.isSuspended ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                  'bg-teal-500/20 text-teal-300 border-teal-500/30'
+                }`}>
                   {(u.displayName || u.email || 'M').charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <p className="font-semibold text-white flex items-center gap-2">
-                    {u.displayName || 'Active Member'} 
+                
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-white text-sm truncate">
+                      {u.displayName || 'Clinical Professional'}
+                    </p>
+
+                    {/* Role Tag */}
                     {u.email === 'redhadadoua@gmail.com' ? (
-                      <span className="text-[9px] bg-red-500/20 text-red-300 px-2 py-0.5 rounded uppercase font-bold tracking-wider border border-red-500/30">Superadmin</span>
+                      <span className="text-[8px] bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded font-bold uppercase border border-red-500/30">Superadmin</span>
                     ) : u.role === 'admin' ? (
-                      <span className="text-[9px] bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded uppercase font-bold tracking-wider border border-teal-500/30">Admin</span>
+                      <span className="text-[8px] bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded font-bold uppercase border border-sky-500/30">Admin</span>
                     ) : (
-                      <span className="text-[9px] bg-white/5 text-white/40 px-2 py-0.5 rounded uppercase font-medium tracking-wider border border-white/5">User</span>
+                      <span className="text-[8px] bg-white/5 text-white/40 px-1.5 py-0.5 rounded font-medium uppercase border border-white/5">User</span>
                     )}
-                  </p>
-                  <p className="text-xs text-white/50">{u.email}</p>
-                  {u.phoneNumber && <p className="text-[10px] text-white/30 font-mono mt-0.5">{u.phoneNumber}</p>}
+
+                    {/* Verified Clinician Title Badge */}
+                    {u.isVerified && (
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase inline-flex items-center gap-1 border ${
+                        u.customBadgeColor === 'purple' ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' :
+                        u.customBadgeColor === 'blue' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' :
+                        'bg-teal-500/20 text-teal-300 border-teal-500/30'
+                      }`}>
+                        <CheckCircle2 size={10} className="shrink-0" />
+                        {u.verificationTitle || 'Verified Medic'}
+                      </span>
+                    )}
+
+                    {/* Blocked Badge */}
+                    {u.isBlocked && (
+                      <span className="text-[8px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Blocked</span>
+                    )}
+
+                    {/* Suspended Badge */}
+                    {u.isSuspended && (
+                      <span className="text-[8px] bg-amber-500 text-black px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wider">Suspended</span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-white/50 truncate">{u.email}</p>
+                  
+                  <div className="flex items-center gap-4 text-[10px] text-white/30 font-mono">
+                    {u.phoneNumber && <span>Phone: {u.phoneNumber}</span>}
+                    {u.createdAt && (
+                      <span>Born: {typeof u.createdAt === 'string' ? u.createdAt.substring(0, 10) : 'N/A'}</span>
+                    )}
+                  </div>
                 </div>
               </div>
               
-              <div className="flex items-center justify-end gap-3 self-end md:self-auto">
+              {/* Controls Panel */}
+              <div className="flex flex-wrap items-center gap-2 self-end xl:self-auto pt-2 xl:pt-0">
                 {u.email !== 'redhadadoua@gmail.com' && (
                   <>
+                    {/* Inline Badge Picker */}
+                    {assigningBadgeUid === u.uid ? (
+                      <div className="flex items-center gap-1.5 bg-slate-900 border border-white/10 rounded-lg p-1.5 animate-pulse">
+                        <select
+                          value={customBadgeText}
+                          onChange={(e) => {
+                            if (e.target.value === 'custom') {
+                              setCustomBadgeText('Chief Surgeon 🩺');
+                            } else {
+                              setCustomBadgeText(e.target.value);
+                            }
+                          }}
+                          className="bg-slate-950 border border-white/5 text-[10px] text-white rounded px-2 py-1 outline-none"
+                        >
+                          <option value="">Select Badge...</option>
+                          <option value="Verified Doctor 🩺">Verified Doctor 🩺</option>
+                          <option value="Surgical Specialist 🥼">Surgical Specialist 🥼</option>
+                          <option value="Dental Surgeon 🦷">Dental Surgeon 🦷</option>
+                          <option value="Emergency Nurse 🏥">Emergency Nurse 🏥</option>
+                          <option value="MD Resident 🎓">MD Resident 🎓</option>
+                          <option value="custom">Custom Entry...</option>
+                        </select>
+                        <select
+                          value={customBadgeColor}
+                          onChange={(e) => setCustomBadgeColor(e.target.value)}
+                          className="bg-slate-950 border border-white/5 text-[10px] text-white rounded px-1.5 py-1 outline-none"
+                        >
+                          <option value="teal">Teal</option>
+                          <option value="purple">Purple</option>
+                          <option value="blue">Blue</option>
+                        </select>
+                        <button
+                          onClick={() => handleUpdateVerification(u.uid, true, customBadgeText || 'Verified Doctor 🩺', customBadgeColor)}
+                          className="px-2 py-1 bg-teal-500 text-black text-[10px] font-bold rounded"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setAssigningBadgeUid(null)}
+                          className="text-white/40 hover:text-white text-[10px] px-1"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setAssigningBadgeUid(u.uid);
+                          setCustomBadgeText(u.verificationTitle || 'Verified Doctor 🩺');
+                          setCustomBadgeColor(u.customBadgeColor || 'teal');
+                        }}
+                        className="px-2.5 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-300 rounded-lg text-xs font-semibold"
+                      >
+                        {u.isVerified ? 'Edit Badge' : 'Give Badge'}
+                      </button>
+                    )}
+
+                    {/* Block / Unblock Account */}
                     <button
-                      onClick={() => handleToggleRole(u)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold tracking-wide uppercase transition-colors border ${
-                        u.role === 'admin'
-                          ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/20'
-                          : 'bg-teal-500/10 hover:bg-teal-500/20 text-teal-300 border-teal-500/20'
+                      onClick={() => handleToggleBlock(u)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
+                        u.isBlocked 
+                          ? 'bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' 
+                          : 'bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/20'
                       }`}
                     >
-                      {u.role === 'admin' ? 'Demote to User' : 'Promote to Admin'}
+                      {u.isBlocked ? 'Unblock' : 'Block'}
                     </button>
+
+                    {/* Suspend / Unsuspend Account */}
+                    <button
+                      onClick={() => handleToggleSuspend(u)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold ${
+                        u.isSuspended 
+                          ? 'bg-emerald-500/15 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' 
+                          : 'bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300 border border-yellow-500/20'
+                      }`}
+                    >
+                      {u.isSuspended ? 'Unsuspend' : 'Suspend'}
+                    </button>
+
+                    {/* Promote / Demote Role */}
+                    <button
+                      onClick={() => handleToggleRole(u)}
+                      className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${
+                        u.role === 'admin'
+                          ? 'bg-slate-800 text-white/80 border-white/10 hover:bg-slate-700'
+                          : 'bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border-sky-500/25'
+                      }`}
+                    >
+                      {u.role === 'admin' ? 'Demote User' : 'Make Admin'}
+                    </button>
+
+                    {/* Delete account permanently */}
                     <button
                       onClick={() => handleDeleteUser(u.uid)}
-                      className="w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center hover:bg-red-500/20 text-red-400 transition-colors"
-                      title="Permanently Delete"
+                      className="w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/25 flex items-center justify-center hover:bg-red-500/20 text-red-400 transition-colors shrink-0"
+                      title="Permanently Delete User"
                     >
-                      <Trash2 size={15} />
+                      <Trash2 size={14} />
                     </button>
                   </>
                 )}
@@ -1791,31 +2031,35 @@ function SettingsManager() {
     storeName: 'Joamedic',
     currency: 'DZD',
     taxRate: 19,
-    theme: 'emerald'
+    theme: 'emerald',
+    embroideryFee: 500,
+    shippingFee: 650,
+    supportEmail: 'contact@joamedic.dz',
+    supportPhone: '+213 555 12 34 56',
+    activeRegions: 'Algiers, Oran, Constantine, Sétif, Blida, Annaba'
   });
+  
   const [saving, setSaving] = useState(false);
+  const [resettingCatalog, setResettingCatalog] = useState(false);
   const [successBanner, setSuccessBanner] = useState(false);
 
   useEffect(() => {
-    // Read from Firestore settings/store doc
     const loadSettings = async () => {
       try {
         const snap = await getDocs(collection(db, 'settings'));
         let found = false;
         snap.forEach((docSnap) => {
           if (docSnap.id === 'store') {
-            setStoreConfig(docSnap.data() as any);
+            setStoreConfig(prev => ({ ...prev, ...docSnap.data() }));
             found = true;
           }
         });
         
         if (!found) {
-          // Initialize first default settings document if empty
           await setDoc(doc(db, 'settings', 'store'), storeConfig);
         }
       } catch (err) {
         console.error('Error fetching settings:', err);
-        handleFirestoreError(err, OperationType.GET, 'settings');
       }
     };
     loadSettings();
@@ -1829,9 +2073,34 @@ function SettingsManager() {
       setTimeout(() => setSuccessBanner(false), 4000);
     } catch (err) {
       console.error('Error writing settings to Firestore: ', err);
-      handleFirestoreError(err, OperationType.WRITE, 'settings/store');
+      alert('Error updating custom configurator rules.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Re-sync products catalogue defined in code to override/feed Firestore
+  const handleResetCatalog = async () => {
+    const check = window.confirm(
+      "Warning: This will forcefully re-sync Joamedic product catalog, applying updated product configurations and the correct clinical product images ('sami 10, sami 10sc, sami 11, sami sdqc, 013, 012, 011') defined in products.ts. Continue?"
+    );
+    if (!check) return;
+
+    try {
+      setResettingCatalog(true);
+      const { products } = await import('../data/products');
+      
+      for (const p of products) {
+        const docRef = doc(db, 'products', p.id);
+        await setDoc(docRef, p);
+      }
+      
+      alert("Joamedic product database forcefully cataloged and re-synced inside high-performance Firestore cache!");
+    } catch (err: any) {
+      console.error('Core catalog rebuild failed: ', err);
+      alert('Failed re-cataloging: ' + (err?.message || String(err)));
+    } finally {
+      setResettingCatalog(false);
     }
   };
 
@@ -1846,57 +2115,63 @@ function SettingsManager() {
             className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 p-4 rounded-xl flex items-center gap-3 font-semibold text-sm mb-4"
           >
             <CheckCircle2 size={18} className="text-emerald-400" />
-            Store settings saved and synchronized dynamically across Firebase Firestore collections!
+            Clinical settings written and synchronized across Firebase Firestore database.
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Main Settings card */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 space-y-6">
         <div>
           <h2 className="text-xl font-display font-semibold flex items-center gap-2 mb-1">
-            <Palette size={20} className="text-teal-400" /> Store Appearance & Setup
+            <Palette size={20} className="text-teal-400" /> Administrative Parameters
           </h2>
-          <p className="text-sm text-white/50">Manage the global localized visual and metadata values of the platform.</p>
+          <p className="text-sm text-white/50">Manage default branding and localization values for Joamedic.</p>
         </div>
 
         <div className="space-y-4 pt-4 border-t border-white/10">
-          <div>
-            <label className="block text-sm font-medium text-white/80 mb-2">Default Theme Palette</label>
-            <div className="flex gap-4">
-              <button 
-                onClick={() => setStoreConfig({...storeConfig, theme: 'emerald'})}
-                className={`w-12 h-12 rounded-full bg-emerald-700 hover:scale-110 transition-transform ${storeConfig.theme === 'emerald' ? 'border-2 border-white ring-2 ring-emerald-500' : 'border border-white/20'}`}
-              ></button>
-              <button 
-                onClick={() => setStoreConfig({...storeConfig, theme: 'midnight'})}
-                className={`w-12 h-12 rounded-full bg-slate-700 hover:scale-110 transition-transform ${storeConfig.theme === 'midnight' ? 'border-2 border-white ring-2 ring-blue-500' : 'border border-white/20'}`}
-              ></button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs uppercase tracking-wider text-white/40 mb-2">Display name</label>
+              <input 
+                type="text" 
+                className="w-full bg-slate-900 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white font-medium"
+                value={storeConfig.storeName}
+                onChange={(e) => setStoreConfig({...storeConfig, storeName: e.target.value})}
+              />
             </div>
-          </div>
 
-          <div className="pt-4">
-            <label className="block text-sm font-medium text-white/80 mb-2">Store Branding Name</label>
-            <input 
-              type="text" 
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white"
-              value={storeConfig.storeName}
-              onChange={(e) => setStoreConfig({...storeConfig, storeName: e.target.value})}
-            />
+            <div>
+              <label className="block text-xs uppercase tracking-wider text-white/40 mb-2 font-bold text-teal-300">Default Palette</label>
+              <div className="flex gap-4 items-center h-[46px] pl-2">
+                <button 
+                  onClick={() => setStoreConfig({...storeConfig, theme: 'emerald'})}
+                  className={`w-8 h-8 rounded-full bg-emerald-700 hover:scale-110 transition-transform ${storeConfig.theme === 'emerald' ? 'border-2 border-white ring-2 ring-emerald-500' : 'border border-white/20'}`}
+                  title="Clinical Emerald Theme"
+                ></button>
+                <button 
+                  onClick={() => setStoreConfig({...storeConfig, theme: 'midnight'})}
+                  className={`w-8 h-8 rounded-full bg-slate-700 hover:scale-110 transition-transform ${storeConfig.theme === 'midnight' ? 'border-2 border-white ring-2 ring-blue-500' : 'border border-white/20'}`}
+                  title="Slate Theme"
+                ></button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Pricing & localisations */}
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 space-y-6">
         <div>
           <h2 className="text-xl font-display font-semibold flex items-center gap-2 mb-1">
-            <DollarSign size={20} className="text-teal-400" /> Pricing & Localization Setup
+            <DollarSign size={20} className="text-teal-400" /> Localization & Financial Surcharges
           </h2>
-          <p className="text-sm text-white/50">Edit localization currency parameters.</p>
+          <p className="text-sm text-white/50">Edit flat-rate logistics fees and localization currencies for hospital scrubs.</p>
         </div>
 
         <div className="space-y-4 pt-4 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-white/80 mb-2">Base Currency</label>
+            <label className="block text-xs uppercase tracking-wider text-white/40 mb-2">Base Currency</label>
             <select 
               value={storeConfig.currency}
               onChange={(e) => setStoreConfig({...storeConfig, currency: e.target.value})}
@@ -1908,7 +2183,7 @@ function SettingsManager() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-white/80 mb-2">Tax Rate (%)</label>
+            <label className="block text-xs uppercase tracking-wider text-white/40 mb-2">Government Tax Rate (%)</label>
             <input 
               type="number" 
               className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white"
@@ -1916,10 +2191,87 @@ function SettingsManager() {
               onChange={(e) => setStoreConfig({...storeConfig, taxRate: Number(e.target.value)})}
             />
           </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-white/40 mb-2">Embroidery Fee (DA)</label>
+            <input 
+              type="number" 
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white"
+              value={storeConfig.embroideryFee}
+              onChange={(e) => setStoreConfig({...storeConfig, embroideryFee: Number(e.target.value)})}
+            />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-white/40 mb-2">Flat Shipping Delivery Cost (DA)</label>
+            <input 
+              type="number" 
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white"
+              value={storeConfig.shippingFee}
+              onChange={(e) => setStoreConfig({...storeConfig, shippingFee: Number(e.target.value)})}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex justify-end pr-2">
+      {/* Support & Locations Channels */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8 space-y-6">
+        <div>
+          <h2 className="text-xl font-display font-semibold flex items-center gap-2 mb-1">
+            <Users size={20} className="text-teal-400" /> Support Channels & Delivery Regions
+          </h2>
+          <p className="text-sm text-white/50">Manage active medical support channels and logistics regions.</p>
+        </div>
+
+        <div className="space-y-4 pt-4 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-white/40 mb-2">Support Email Address</label>
+            <input 
+              type="email" 
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white font-mono"
+              value={storeConfig.supportEmail}
+              onChange={(e) => setStoreConfig({...storeConfig, supportEmail: e.target.value})}
+            />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-white/40 mb-2">Support Helpline Phone</label>
+            <input 
+              type="text" 
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white font-mono"
+              value={storeConfig.supportPhone}
+              onChange={(e) => setStoreConfig({...storeConfig, supportPhone: e.target.value})}
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-xs uppercase tracking-wider text-white/40 mb-2 font-bold text-teal-300">Active Wilayas / Logistics Regions</label>
+            <input 
+              type="text" 
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-teal-400/50 text-white"
+              value={storeConfig.activeRegions}
+              onChange={(e) => setStoreConfig({...storeConfig, activeRegions: e.target.value})}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Critical Sync Cache Section */}
+      <div className="bg-teal-500/5 border border-teal-500/10 rounded-2xl p-6 md:p-8 space-y-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex-1">
+          <h4 className="text-sm font-semibold text-teal-300 flex items-center gap-1.5 uppercase tracking-wider mb-1">
+            <CheckCircle2 size={16} /> Overwrite Products Cash Cache
+          </h4>
+          <p className="text-xs text-white/60 leading-relaxed">
+            Updated product names, configurations, descriptions, and clinical image filenames (for <strong>sami 10, sami 11, sami sdqc, 013, 012, 011</strong>) specified in the local code? Push them instantly into the Firestore catalog to overwrite caching anomalies.
+          </p>
+        </div>
+        <button
+          onClick={handleResetCatalog}
+          disabled={resettingCatalog}
+          className="px-5 py-2.5 bg-teal-500/20 hover:bg-teal-500 hover:text-black border border-teal-500/30 font-bold rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shrink-0 disabled:opacity-40"
+        >
+          {resettingCatalog ? 'Resetting Catalogue...' : 'Re-sync product images'}
+        </button>
+      </div>
+
+      <div className="flex justify-end pr-2 pt-4">
         <button 
           onClick={handleSave}
           disabled={saving}

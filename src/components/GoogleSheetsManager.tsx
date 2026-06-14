@@ -12,10 +12,15 @@ import {
   FileUp,
   Check,
   ExternalLink,
-  Info
+  Info,
+  Search,
+  CheckCircle2,
+  Calendar,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, setDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, onSnapshot, writeBatch, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 interface SheetsConfig {
@@ -25,6 +30,27 @@ interface SheetsConfig {
   webAppUrl: string | null;
   autoSyncOrders: boolean;
   lastSyncedAt: string | null;
+}
+
+interface LocalOrder {
+  id: string;
+  total: number;
+  status: string;
+  createdAt?: any;
+  shippingInfo?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    wilaya?: string;
+    city?: string;
+    address?: string;
+  };
+  items?: Array<{
+    name: string;
+    size?: string;
+    quantity?: number;
+    price?: string;
+  }>;
 }
 
 export default function GoogleSheetsManager() {
@@ -44,15 +70,22 @@ export default function GoogleSheetsManager() {
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [pullingOrders, setPullingOrders] = useState(false);
   const [creatingSheet, setCreatingSheet] = useState(false);
+  const [singleSyncId, setSingleSyncId] = useState<string | null>(null);
+  
+  // Real-time Orders local lookup
+  const [orders, setOrders] = useState<LocalOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [orderQuery, setOrderQuery] = useState('');
+  
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [manualSheetId, setManualSheetId] = useState('');
   const [webAppUrlInput, setWebAppUrlInput] = useState('');
   const [showScriptInfo, setShowScriptInfo] = useState(false);
 
-  // 1. Load configuration from Firestore doc settings/google_sheets
+  // 1. Fetch Google Sheets integration configurations
   useEffect(() => {
-    const loadConfig = async () => {
+    const loadConfigAndOrders = async () => {
       try {
         const docRef = doc(db, 'settings', 'google_sheets');
         const docSnap = await getDoc(docRef);
@@ -69,7 +102,30 @@ export default function GoogleSheetsManager() {
         setLoadingConfig(false);
       }
     };
-    loadConfig();
+    loadConfigAndOrders();
+  }, []);
+
+  // 2. Load live orders from database to view inside this tab
+  useEffect(() => {
+    setLoadingOrders(true);
+    const unsubscribe = onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const list: LocalOrder[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as LocalOrder);
+      });
+      setOrders(list);
+      setLoadingOrders(false);
+    }, (err) => {
+      console.warn("Error loading live orders in sheet view:", err);
+      // Fallback
+      getDocs(collection(db, 'orders')).then((snap) => {
+        const list: LocalOrder[] = [];
+        snap.forEach((d) => list.push({ id: d.id, ...d.data() } as LocalOrder));
+        setOrders(list);
+      }).finally(() => setLoadingOrders(false));
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Save current config to Firestore
@@ -79,18 +135,17 @@ export default function GoogleSheetsManager() {
       await setDoc(docRef, newConfig);
       setConfig(newConfig);
     } catch (err) {
-      console.error('Error saving Google Sheets configuration to Firestore:', err);
+      console.error('Error saving Google Sheets configuration:', err);
       setError('Could not persist sheet configuration inside Firestore database.');
     }
   };
 
-  // 2. Connect Google Sheets with the correct spreadsheets & drive scope
+  // Google OAuth Auth Code
   const connectGoogleSheets = async () => {
     setError(null);
     setConnecting(true);
     try {
       const provider = new GoogleAuthProvider();
-      // Add spreadsheets and drive scopes
       provider.addScope('https://www.googleapis.com/auth/spreadsheets');
       provider.addScope('https://www.googleapis.com/auth/drive');
       
@@ -103,17 +158,15 @@ export default function GoogleSheetsManager() {
       }
       
       setAccessToken(token);
-      setSuccessMsg(`Google Sheets authenticated successfully! Connected as ${result.user.displayName || result.user.email}`);
+      setSuccessMsg(`Google connection authenticated! Logged in as ${result.user.displayName || result.user.email}`);
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
       console.error('Authentication Error:', err);
       let friendly = err?.message || 'Authentication failed. Please verify popup blocker settings.';
       if (err.code === 'auth/popup-blocked' || err.message?.includes('popup-blocked') || err.message?.includes('popup_blocked')) {
-        friendly = 'The Google Sheets authentication popup was blocked by your browser\'s security or because of sandboxing. Please allow popups for this page, or open the app in a new tab using the URL in your browser\'s address bar.';
+        friendly = 'The authentication popup was blocked by your browser\'s security. This happens inside nested preview modes. Please open Joamedic in a new tab by copying the browser URL, or authorize Popups to complete connection.';
       } else if (err.code === 'auth/popup-closed-by-user' || err.message?.includes('popup-closed-by-user')) {
-        friendly = 'The Google Sheets authorization window was closed before it completed. Please try connecting Google Sheets again and complete the login flow.';
-      } else if (err.code === 'auth/cancelled-popup-request' || err.message?.includes('cancelled-popup-request')) {
-        friendly = 'The authentication request was cancelled or superseded by another request. Please try again.';
+        friendly = 'The login window was closed before completion. Please try connecting Google Sheets again.';
       }
       setError(friendly);
     } finally {
@@ -121,12 +174,11 @@ export default function GoogleSheetsManager() {
     }
   };
 
-  // Disconnect OAuth & Sheet Link
   const disconnectSheets = () => {
     setAccessToken(null);
     setError(null);
     setSuccessMsg('Disconnected Google token successfully.');
-    setTimeout(() => setSuccessMsg(null), 3000);
+    setTimeout(() => setSuccessMsg(null), 3500);
   };
 
   const handleSaveWebhook = async () => {
@@ -140,7 +192,7 @@ export default function GoogleSheetsManager() {
     }
   };
 
-  // 3. Smart Search & Find or Create Spreadsheet named 'joamedic'
+  // Discover or Create Spreadsheet 'joamedic'
   const handleCreateNewSpreadsheet = async () => {
     if (!accessToken) {
       setError('Please connect Google Sheets first to authorize Drive.');
@@ -150,9 +202,9 @@ export default function GoogleSheetsManager() {
     setError(null);
     setCreatingSheet(true);
     try {
-      // Step A: Search for any spreadsheet exactly titled 'joamedic' or 'Joamedic'
-      const query = encodeURIComponent("name = 'joamedic' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false");
-      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,webViewLink)`, {
+      // Search for any existing spreadsheet exactly titled 'joamedic'
+      const queryStr = encodeURIComponent("name = 'joamedic' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false");
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${queryStr}&fields=files(id,name,webViewLink)`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
@@ -165,7 +217,6 @@ export default function GoogleSheetsManager() {
       if (searchRes.ok) {
         const searchData = await searchRes.json();
         if (searchData.files && searchData.files.length > 0) {
-          // Found existing joamedic sheet!
           const existingFile = searchData.files[0];
           spreadsheetId = existingFile.id;
           spreadsheetUrl = existingFile.webViewLink || `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
@@ -174,7 +225,6 @@ export default function GoogleSheetsManager() {
       }
 
       if (spreadsheetId) {
-        // Link the existing spreadsheet directly
         const updatedConfig: SheetsConfig = {
           ...config,
           spreadsheetId,
@@ -187,7 +237,7 @@ export default function GoogleSheetsManager() {
         return;
       }
 
-      // If not discovered, create a brand new spreadsheet named 'joamedic'
+      // Create new
       const res = await fetch('https://sheets.googleapis.com/sheets/v4/spreadsheets', {
         method: 'POST',
         headers: {
@@ -210,8 +260,8 @@ export default function GoogleSheetsManager() {
       const newSpreadsheetId = rawData.spreadsheetId;
       const newSpreadsheetUrl = rawData.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${newSpreadsheetId}/edit`;
 
-      // Step B: Set up core tabs Products and Orders, renaming Sheet1 to Products
-      const setupRes = await fetch(`https://sheets.googleapis.com/sheets/v4/spreadsheets/${newSpreadsheetId}:batchUpdate`, {
+      // Setup initial sheet tabs: Products and Orders
+      await fetch(`https://sheets.googleapis.com/sheets/v4/spreadsheets/${newSpreadsheetId}:batchUpdate`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -219,29 +269,11 @@ export default function GoogleSheetsManager() {
         },
         body: JSON.stringify({
           requests: [
-            {
-              updateSheetProperties: {
-                properties: {
-                  sheetId: 0,
-                  title: 'Products'
-                },
-                fields: 'title'
-              }
-            },
-            {
-              addSheet: {
-                properties: {
-                  title: 'Orders'
-                }
-              }
-            }
+            { updateSheetProperties: { properties: { sheetId: 0, title: 'Products' }, fields: 'title' } },
+            { addSheet: { properties: { title: 'Orders' } } }
           ]
         })
-      });
-
-      if (!setupRes.ok) {
-        console.warn('Initial tab renaming failed (some older Google configurations might not support index 0 renaming). Proceeding with default structure.');
-      }
+      }).catch((e) => console.log('Tabs initialization skipped: ', e));
 
       const updatedConfig: SheetsConfig = {
         ...config,
@@ -255,23 +287,18 @@ export default function GoogleSheetsManager() {
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
       console.error(err);
-      let errMsg = err?.message || 'Error occurred while establishing Google Spreadsheet.';
-      if (typeof errMsg === 'string' && (errMsg.includes('Failed to fetch') || errMsg.toLowerCase().includes('fetch'))) {
-        errMsg = 'Failed to reach Google APIs (Failed to fetch). This usually happens if a browser ad-blocker, Brave Shields, or privacy/security extension is restricting requests to Google\'s API servers, or Google Sheets/Drive scopes are not permitted. Please disable active blockers for this tab or try manually mapping your sheet.';
-      }
-      setError(errMsg);
+      setError(err?.message || 'Error occurred while establishing Google Spreadsheet.');
     } finally {
       setCreatingSheet(false);
     }
   };
 
-  // Set Spreadsheet manually by ID or URL
+  // Link Spreadsheet manually by URL or ID
   const handleLinkManualSpreadsheet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualSheetId.trim()) return;
 
     setError(null);
-    // Parse Google Sheets full URL or keep raw ID
     let finalId = manualSheetId.trim();
     if (finalId.includes('spreadsheets/d/')) {
       const match = finalId.match(/\/d\/([a-zA-Z0-9-_]+)/);
@@ -285,27 +312,27 @@ export default function GoogleSheetsManager() {
         ...config,
         spreadsheetId: finalId,
         spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${finalId}/edit`,
-        spreadsheetTitle: `Linked Sheet (${finalId.substring(0, 8)}...)`,
+        spreadsheetTitle: `Mapped Spreadsheet (${finalId.substring(0, 8)}...)`,
       };
       await saveConfig(updatedConfig);
       setManualSheetId('');
       setSuccessMsg('Manual spreadsheet linked successfully!');
-      setTimeout(() => setSuccessMsg(null), 3000);
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
       setError('Could not update spreadsheet links.');
     }
   };
 
-  // 4. Export Products database to Sheet Tab
+  // Export Products list to Spreadsheet
   const handleSyncProducts = async () => {
     const useWebhook = !!config.webAppUrl;
     if (!useWebhook) {
       if (!accessToken) {
-        setError('Please connect Google Sheets via OAuth or configure a Webhook URL.');
+        setError('Please connect Google Sheets via Google Login first.');
         return;
       }
       if (!config.spreadsheetId) {
-        setError('Please connect or create a Spreadsheet first.');
+        setError('Please link a Spreadsheet first.');
         return;
       }
     }
@@ -313,12 +340,8 @@ export default function GoogleSheetsManager() {
     setError(null);
     setSyncingProducts(true);
     try {
-      // Query Firestore products
       const snap = await getDocs(collection(db, 'products'));
-      const productRows: any[][] = [];
-      
-      // Header values
-      productRows.push([
+      const productRows: any[][] = [[
         'Product ID',
         'Name',
         'Category',
@@ -327,7 +350,7 @@ export default function GoogleSheetsManager() {
         'In Stock Balance',
         'Product Description',
         'Web Image Resource'
-      ]);
+      ]];
 
       snap.forEach((docSnap) => {
         const p = docSnap.data();
@@ -344,23 +367,20 @@ export default function GoogleSheetsManager() {
       });
 
       if (useWebhook) {
-        // Send products via Apps Script Webhook
         const webhookRes = await fetch(config.webAppUrl!, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'sync_products', data: productRows })
         });
-        if (!webhookRes.ok) throw new Error(`Webhook failed with status ${webhookRes.status}`);
-        const result = await webhookRes.json().catch(() => ({}));
-        if (result.error) throw new Error(result.error);
+        if (!webhookRes.ok) throw new Error(`Webhook responded with code ${webhookRes.status}`);
         
         await saveConfig({ ...config, lastSyncedAt: new Date().toLocaleString() });
-        setSuccessMsg('Active clinical apparel product catalogs pushed via Apps Script Webhook!');
+        setSuccessMsg('Active clinical products pushed via Apps Script Webhook!');
         setTimeout(() => setSuccessMsg(null), 5000);
         return;
       }
 
-      // Write values to Products Tab
+      // OAuth API write to tab 'Products'
       const res = await fetch(
         `https://sheets.googleapis.com/sheets/v4/spreadsheets/${config.spreadsheetId}/values/Products!A1?valueInputOption=USER_ENTERED`,
         {
@@ -378,57 +398,90 @@ export default function GoogleSheetsManager() {
       );
 
       if (!res.ok) {
-        // Fallback: Check if they are writing to an default Sheet1 layout or tab issue
-        const fallbackRes = await fetch(
+        // Fallback to Sheet1 or generic range
+        await fetch(
           `https://sheets.googleapis.com/sheets/v4/spreadsheets/${config.spreadsheetId}/values/A1?valueInputOption=USER_ENTERED`,
           {
             method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              range: 'A1',
-              majorDimension: 'ROWS',
-              values: productRows
-            })
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ range: 'A1', majorDimension: 'ROWS', values: productRows })
           }
         );
-        if (!fallbackRes.ok) {
-          throw new Error('Google Spreadsheet refused database payload. Make sure your sheet ID is typing-correct and has edit writes.');
-        }
       }
 
-      const now = new Date().toLocaleString();
-      const updatedConfig: SheetsConfig = {
-        ...config,
-        lastSyncedAt: now
-      };
-      await saveConfig(updatedConfig);
-      setSuccessMsg('Active clinical apparel product catalogs written to Spreadsheet flawlessly!');
-      setTimeout(() => setSuccessMsg(null), 5000);
+      await saveConfig({ ...config, lastSyncedAt: new Date().toLocaleString() });
+      setSuccessMsg('Active Joamedic scrub catalog successfully exported!');
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       console.error(err);
-      let errMsg = err?.message || 'Error occurred exporting products lists.';
-      if (typeof errMsg === 'string' && (errMsg.includes('Failed to fetch') || errMsg.toLowerCase().includes('fetch'))) {
-        errMsg = 'Failed to reach Google APIs (Failed to fetch) while exporting products. Please verify your internet connection and check if sheets.googleapis.com is allowed inside your ad-blocker/firewall Settings.';
-      }
-      setError(errMsg);
+      setError(err?.message || 'Error occurred exporting products.');
     } finally {
       setSyncingProducts(false);
     }
   };
 
-  // 5. Export Orders database to Sheet Tab
+  // Convert full Firestore orders snap to Google friendly rows
+  const compileOrderRows = (ordersList: LocalOrder[]): any[][] => {
+    const rows: any[][] = [[
+      'Order ID',
+      'Customer Name',
+      'Customer Email',
+      'Deliverable Phone',
+      'Clinic / Station Address',
+      'Order Total Amount',
+      'Transaction Timestamp',
+      'Fulfillment Status',
+      'Purchased items detail'
+    ]];
+
+    ordersList.forEach((o) => {
+      const itemsList = Array.isArray(o.items) 
+        ? o.items.map((i: any) => `${i.name} (${i.size || 'N/A'}, Qty: ${i.quantity || 1})`).join('; ')
+        : 'None';
+
+      const addressParts = [];
+      if (o.shippingInfo?.address) addressParts.push(o.shippingInfo.address);
+      if (o.shippingInfo?.city) addressParts.push(o.shippingInfo.city);
+      if (o.shippingInfo?.wilaya) addressParts.push(o.shippingInfo.wilaya);
+      const finalAddress = addressParts.length > 0 ? addressParts.join(', ') : 'N/A';
+
+      let formattedDate = 'N/A';
+      if (o.createdAt) {
+        if (typeof o.createdAt.toDate === 'function') {
+          formattedDate = o.createdAt.toDate().toISOString();
+        } else if (o.createdAt.seconds) {
+          formattedDate = new Date(o.createdAt.seconds * 1000).toISOString();
+        } else {
+          formattedDate = String(o.createdAt);
+        }
+      }
+
+      rows.push([
+        o.id,
+        o.shippingInfo?.name || 'Clinician Member',
+        o.shippingInfo?.email || 'N/A',
+        o.shippingInfo?.phone || 'N/A',
+        finalAddress,
+        o.total || 0,
+        formattedDate,
+        o.status || 'pending',
+        itemsList
+      ]);
+    });
+
+    return rows;
+  };
+
+  // Export all Orders to Spreadsheet
   const handleSyncOrders = async () => {
     const useWebhook = !!config.webAppUrl;
     if (!useWebhook) {
       if (!accessToken) {
-        setError('Please connect Google Sheets via OAuth or configure a Webhook URL.');
+        setError('Please connect Google Sheets via Google Login first.');
         return;
       }
       if (!config.spreadsheetId) {
-        setError('Please connect or create a Spreadsheet first.');
+        setError('Please link a Spreadsheet first.');
         return;
       }
     }
@@ -436,81 +489,15 @@ export default function GoogleSheetsManager() {
     setError(null);
     setSyncingOrders(true);
     try {
-      // Query Firestore orders
-      const snap = await getDocs(collection(db, 'orders'));
-      const orderRows: any[][] = [];
-      
-      // Header values
-      orderRows.push([
-        'Order ID',
-        'Customer Name',
-        'Customer Email',
-        'Deliverable Phone',
-        'Clinie / Station Address',
-        'Order Total Amount',
-        'Transaction Timestamp',
-        'Fulfillment Status',
-        'Purchased items detail'
-      ]);
-
-      snap.forEach((docSnap) => {
-        const o = docSnap.data();
-        
-        // Custom formatting for purchased items list
-        const itemsList = Array.isArray(o.items) 
-          ? o.items.map((i: any) => `${i.name} (Color: ${i.color || 'N/A'}, Size: ${i.size || 'N/A'}, Qty: ${i.quantity || 1})`).join('; ')
-          : 'None';
-
-        // Extract and construct beautiful readable address
-        const addressParts = [];
-        if (o.shippingInfo?.address) addressParts.push(o.shippingInfo.address);
-        if (o.shippingInfo?.city) addressParts.push(o.shippingInfo.city);
-        if (o.shippingInfo?.wilaya) addressParts.push(o.shippingInfo.wilaya);
-        const finalAddress = addressParts.length > 0 
-          ? addressParts.join(', ') 
-          : (o.shippingAddress?.address || 'N/A');
-
-        // Safely extract and format Timestamp
-        let formattedDate = 'N/A';
-        if (o.createdAt) {
-          if (typeof o.createdAt.toDate === 'function') {
-            formattedDate = o.createdAt.toDate().toISOString();
-          } else if (o.createdAt.seconds) {
-            formattedDate = new Date(o.createdAt.seconds * 1000).toISOString();
-          } else {
-            formattedDate = String(o.createdAt);
-          }
-        } else if (o.timestamp) {
-          if (typeof o.timestamp.toDate === 'function') {
-            formattedDate = o.timestamp.toDate().toISOString();
-          } else {
-            formattedDate = String(o.timestamp);
-          }
-        }
-
-        orderRows.push([
-          docSnap.id,
-          o.shippingInfo?.name || o.shippingAddress?.fullName || o.customerName || 'Clinician Member',
-          o.shippingInfo?.email || o.shippingAddress?.email || o.customerEmail || 'N/A',
-          o.shippingInfo?.phone || o.shippingAddress?.phone || o.customerPhone || 'N/A',
-          finalAddress,
-          o.total || '0 DA',
-          formattedDate,
-          o.status || 'pending',
-          itemsList
-        ]);
-      });
+      const orderRows = compileOrderRows(orders);
 
       if (useWebhook) {
-        // Send orders via Apps Script Webhook
         const webhookRes = await fetch(config.webAppUrl!, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'sync_orders', data: orderRows })
         });
-        if (!webhookRes.ok) throw new Error(`Webhook failed with status ${webhookRes.status}`);
-        const result = await webhookRes.json().catch(() => ({}));
-        if (result.error) throw new Error(result.error);
+        if (!webhookRes.ok) throw new Error(`Webhook failed: ${webhookRes.status}`);
         
         await saveConfig({ ...config, lastSyncedAt: new Date().toLocaleString() });
         setSuccessMsg('Active clinical orders written to Spreadsheet via Apps Script Webhook!');
@@ -518,7 +505,7 @@ export default function GoogleSheetsManager() {
         return;
       }
 
-      // Write values to Orders Tab
+      // Write via OAuth
       const res = await fetch(
         `https://sheets.googleapis.com/sheets/v4/spreadsheets/${config.spreadsheetId}/values/Orders!A1?valueInputOption=USER_ENTERED`,
         {
@@ -536,89 +523,131 @@ export default function GoogleSheetsManager() {
       );
 
       if (!res.ok) {
-        // Fallback: If Orders tab doesn't exist, try appending or writing to any generic sheet
-        setError('Ensure that an "Orders" sheet tab is present inside your Spreadsheet. We are retrying on fallback range.');
+        // Try generic fallback
         await fetch(
           `https://sheets.googleapis.com/sheets/v4/spreadsheets/${config.spreadsheetId}/values/A1?valueInputOption=USER_ENTERED`,
           {
             method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              range: 'A1',
-              majorDimension: 'ROWS',
-              values: orderRows
-            })
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ range: 'A1', majorDimension: 'ROWS', values: orderRows })
           }
         );
       }
 
-      const now = new Date().toLocaleString();
-      const updatedConfig: SheetsConfig = {
-        ...config,
-        lastSyncedAt: now
-      };
-      await saveConfig(updatedConfig);
-      setSuccessMsg('Active clinic client transaction purchase records written to your Spreadsheet!');
-      setTimeout(() => setSuccessMsg(null), 5000);
+      await saveConfig({ ...config, lastSyncedAt: new Date().toLocaleString() });
+      setSuccessMsg('All live customer orders successfully exported to Spreadsheet.');
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       console.error(err);
-      let errMsg = err?.message || 'Error occurred exporting order sheets.';
-      if (typeof errMsg === 'string' && (errMsg.includes('Failed to fetch') || errMsg.toLowerCase().includes('fetch'))) {
-        errMsg = 'Failed to reach Google Sheets API (Failed to fetch) while syncing orders. Please ensure any browser blockers or Brave Shields are disabled, and check your internet connection.';
-      }
-      setError(errMsg);
+      setError(err?.message || 'Error occurred exporting orders.');
     } finally {
       setSyncingOrders(false);
     }
   };
 
-  // 6. Pull / Import & Update Orders from Spreadsheet
+  // Sync a single distinct order directly
+  const handleSyncSingleOrder = async (orderId: string) => {
+    const singleOrderObj = orders.find(o => o.id === orderId);
+    if (!singleOrderObj) return;
+
+    setError(null);
+    setSingleSyncId(orderId);
+    try {
+      const useWebhook = !!config.webAppUrl;
+      const parsedRows = compileOrderRows([singleOrderObj]);
+      // Remove compiled headers row for single additions unless database empty
+      const targetRow = parsedRows[1]; 
+
+      if (useWebhook) {
+        const webhookRes = await fetch(config.webAppUrl!, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'add_order', data: [targetRow] })
+        });
+        if (!webhookRes.ok) throw new Error('Webhook rejected this single order');
+        setSuccessMsg(`Order #${orderId} synchronized to Google Sheets via Webhook!`);
+        setTimeout(() => setSuccessMsg(null), 4000);
+        return;
+      }
+
+      // OAuth single row insert (append range)
+      if (!accessToken) {
+        throw new Error('Connect Google Security first in this browser.');
+      }
+      if (!config.spreadsheetId) {
+        throw new Error('Link active Spreadsheet first.');
+      }
+
+      const res = await fetch(
+        `https://sheets.googleapis.com/sheets/v4/spreadsheets/${config.spreadsheetId}/values/Orders!A:I:append?valueInputOption=USER_ENTERED`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            range: 'Orders!A:I',
+            majorDimension: 'ROWS',
+            values: [targetRow]
+          })
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error('Active Spreadsheet rejected appending rows.');
+      }
+
+      setSuccessMsg(`Order #${orderId} appended to Spreadsheet successfully!`);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Failure mapping specific single order.');
+    } finally {
+      setSingleSyncId(null);
+    }
+  };
+
+  // Pull updates from Spreadsheet back into Firestore
   const handlePullOrders = async () => {
     if (!accessToken) {
-      setError('Please connect Google Sheets first.');
+      setError('Please connect Google Sheets first to enable read privilege.');
       return;
     }
     if (!config.spreadsheetId) {
-      setError('Please connect or create a Spreadsheet first.');
+      setError('Please choose or link a Spreadsheet first.');
       return;
     }
 
-    // MANDATORY confirmation dialog for destructive or mutating database operations
     const confirmed = window.confirm(
-      'Are you sure you want to pull order updates from Google Sheets? This will update Firestore order parameters (status, customer info, addresses, and price totals) with the current spreadsheet details.'
+      'Are you sure you want to pull order updates from Google Sheets? This will synchronize status and customer properties back into your live Firestore database.'
     );
     if (!confirmed) return;
 
     setError(null);
     setPullingOrders(true);
     try {
-      // Read values from 'Orders' sheet tab, skipping header row
       const res = await fetch(
         `https://sheets.googleapis.com/sheets/v4/spreadsheets/${config.spreadsheetId}/values/Orders!A2:I1000`,
         {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
+          headers: { 'Authorization': `Bearer ${accessToken}` }
         }
       );
 
       if (!res.ok) {
-        throw new Error('Could not read the "Orders" sheet tab. Verify that the Orders tab has at least one order transaction row.');
+        throw new Error('Could not read the Orders tab. Check that it contains at least one order row.');
       }
 
       const data = await res.json();
       const rows = data.values;
       if (!rows || rows.length === 0) {
-        setSuccessMsg('No active order data rows discovered inside the Spreadsheet.');
+        setSuccessMsg('No orders discovered to update.');
         setTimeout(() => setSuccessMsg(null), 4000);
         return;
       }
 
-      let updatedCount = 0;
-      let createdCount = 0;
+      let updated = 0;
+      let created = 0;
 
       for (const row of rows) {
         const orderId = row[0];
@@ -629,94 +658,54 @@ export default function GoogleSheetsManager() {
         const customerPhone = row[3] || '';
         const address = row[4] || '';
         const totalStr = row[5] || '0';
-        // Clean currency or text delimiters (e.g. "4500 DA" -> 4500)
         const total = parseFloat(totalStr.toString().replace(/[^0-9.]/g, '')) || 0;
         const createdAtStr = row[6] || new Date().toISOString();
         const status = (row[7] || 'processing').toLowerCase().trim();
-        const itemsStr = row[8] || '';
 
         const orderRef = doc(db, 'orders', orderId);
         const docSnap = await getDoc(orderRef);
 
         if (docSnap.exists()) {
-          const existingData = docSnap.data();
+          const existing = docSnap.data();
           await setDoc(orderRef, {
-            ...existingData,
-            status: status,
-            total: total,
+            ...existing,
+            status,
+            total,
             shippingInfo: {
-              ...(existingData.shippingInfo || {}),
+              ...(existing.shippingInfo || {}),
               name: customerName,
               phone: customerPhone,
               email: customerEmail,
-              address: address
+              address
             }
           }, { merge: true });
-          updatedCount++;
+          updated++;
         } else {
-          // Parse list of custom items if present or default
-          const parsedId = Math.floor(10000 + Math.random() * 90000);
-          const parsedItems = itemsStr ? [{
-            id: parsedId,
-            name: itemsStr.substring(0, 120),
-            price: total.toString(),
-            quantity: 1,
-            size: 'Custom',
-            personalization: null
-          }] : [{
-            id: parsedId,
-            name: 'Clinique Premium Apparel Set',
-            price: total.toString(),
-            quantity: 1,
-            size: 'Custom',
-            personalization: null
-          }];
-
-          let parsedDate;
-          try {
-            parsedDate = new Date(createdAtStr);
-            if (isNaN(parsedDate.getTime())) {
-              parsedDate = new Date();
-            }
-          } catch {
-            parsedDate = new Date();
-          }
-
+          // Create new record
           await setDoc(orderRef, {
             userId: 'guest',
-            items: parsedItems,
             total,
             status,
             shippingInfo: {
               name: customerName,
               phone: customerPhone,
               email: customerEmail,
-              address: address,
+              address,
               city: 'Custom',
               wilaya: 'Custom'
             },
-            createdAt: Timestamp.fromDate(parsedDate)
+            createdAt: Timestamp.fromDate(new Date(createdAtStr))
           });
-          createdCount++;
+          created++;
         }
       }
 
-      const now = new Date().toLocaleString();
-      const updatedConfig: SheetsConfig = {
-        ...config,
-        lastSyncedAt: now
-      };
-      await saveConfig(updatedConfig);
-
-      setSuccessMsg(`Google Sheets control sync completed! Updated: ${updatedCount} orders, Created: ${createdCount} orders.`);
+      await saveConfig({ ...config, lastSyncedAt: new Date().toLocaleString() });
+      setSuccessMsg(`Google Sheets sync completed successfully! Updated: ${updated} orders, Created: ${created} orders.`);
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
       console.error(err);
-      let errMsg = err?.message || 'Error occurred pulling records from Google Sheets.';
-      if (typeof errMsg === 'string' && (errMsg.includes('Failed to fetch') || errMsg.toLowerCase().includes('fetch'))) {
-        errMsg = 'Failed to reach Google Sheets API (Failed to fetch) while pulling records. This usually indicates Google APIs are being restricted by your browser ad-blocker or network settings.';
-      }
-      setError(errMsg);
+      setError(err?.message || 'Error occurred pulling records from Google Sheets.');
     } finally {
       setPullingOrders(false);
     }
@@ -733,7 +722,7 @@ export default function GoogleSheetsManager() {
     try {
       await handleSyncProducts();
       await handleSyncOrders();
-      setSuccessMsg('Entire Joamedic store catalog and transaction logs fully synchronized on Google Sheets!');
+      setSuccessMsg('Entire Joamedic store catalogs and logs fully synchronized to Google Sheets!');
     } catch (err: any) {
       setError(err?.message || 'Could not complete synchronization.');
     } finally {
@@ -743,7 +732,7 @@ export default function GoogleSheetsManager() {
   };
 
   const unlinkSpreadsheet = async () => {
-    const confirmUnlink = window.confirm('Deregister and disconnect this spreadsheet? The existing file inside Google Drive will not be touched.');
+    const confirmUnlink = window.confirm('Disconnect this spreadsheet map? The file inside Google Drive will remain completely untouched.');
     if (!confirmUnlink) return;
 
     await saveConfig({
@@ -757,90 +746,67 @@ export default function GoogleSheetsManager() {
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  // CSV Fallback export for Products catalog
-  const downloadProductsCSV = async () => {
+  // CSV Generation backups
+  const downloadProductsCSV = () => {
     try {
-      const snap = await getDocs(collection(db, 'products'));
       const rows: string[][] = [
         ['Product ID', 'Name', 'Category', 'Price (DZD / DA)', 'Original Color', 'In Stock Balance', 'Product Description', 'Web Image Resource']
       ];
-      snap.forEach((docSnap) => {
-        const p = docSnap.data();
-        rows.push([
-          docSnap.id,
-          p.name || '',
-          p.category || '',
-          p.price || '',
-          p.color || '',
-          p.stock !== undefined ? p.stock : '0',
-          p.description || '',
-          p.image || ''
-        ]);
+      // Draw rows locally
+      getDocs(collection(db, 'products')).then((snap) => {
+        snap.forEach((docSnap) => {
+          const p = docSnap.data();
+          rows.push([
+            docSnap.id,
+            p.name || '',
+            p.category || '',
+            p.price || '',
+            p.color || '',
+            p.stock !== undefined ? p.stock : '0',
+            p.description || '',
+            p.image || ''
+          ]);
+        });
+        
+        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+          + rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""').replace(/\n/g, ' ')}"`).join(",")).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Joamedic_Products_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       });
-      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-        + rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""').replace(/\n/g, ' ')}"`).join(",")).join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `Joamedic_Products_Backup_${new Date().toISOString().slice(0, 10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setSuccessMsg("Products catalog successfully exported as local CSV file!");
-      setTimeout(() => setSuccessMsg(null), 5000);
-    } catch (err: any) {
-      console.error(err);
+    } catch (_) {
       setError("Failed to generate local Products CSV backup.");
     }
   };
 
-  // CSV Fallback export for Orders transactions
-  const downloadOrdersCSV = async () => {
+  const downloadOrdersCSV = () => {
     try {
-      const snap = await getDocs(collection(db, 'orders'));
       const rows: string[][] = [
         ['Order ID', 'Customer Name', 'Customer Email', 'Customer Phone', 'Address', 'Total', 'Date Created', 'Status', 'Items List']
       ];
-      
-      snap.forEach((docSnap) => {
-        const o = docSnap.data();
+      orders.forEach((o) => {
         const itemsList = o.items && Array.isArray(o.items)
-          ? o.items.map((i: any) => `${i.name} (Color: ${i.color || 'N/A'}, Size: ${i.size || 'N/A'}, Qty: ${i.quantity || 1})`).join('; ')
+          ? o.items.map((i: any) => `${i.name} (${i.size || 'N/A'}, Qty: ${i.quantity || 1})`).join('; ')
           : 'None';
 
         const addressParts = [];
         if (o.shippingInfo?.address) addressParts.push(o.shippingInfo.address);
         if (o.shippingInfo?.city) addressParts.push(o.shippingInfo.city);
         if (o.shippingInfo?.wilaya) addressParts.push(o.shippingInfo.wilaya);
-        const finalAddress = addressParts.length > 0 
-          ? addressParts.join(', ') 
-          : (o.shippingAddress?.address || 'N/A');
-
-        let formattedDate = 'N/A';
-        if (o.createdAt) {
-          if (typeof o.createdAt.toDate === 'function') {
-            formattedDate = o.createdAt.toDate().toISOString();
-          } else if (o.createdAt.seconds) {
-            formattedDate = new Date(o.createdAt.seconds * 1000).toISOString();
-          } else {
-            formattedDate = String(o.createdAt);
-          }
-        } else if (o.timestamp) {
-          if (typeof o.timestamp.toDate === 'function') {
-            formattedDate = o.timestamp.toDate().toISOString();
-          } else {
-            formattedDate = String(o.timestamp);
-          }
-        }
+        const finalAddress = addressParts.length > 0 ? addressParts.join(', ') : 'N/A';
 
         rows.push([
-          docSnap.id,
-          o.shippingInfo?.name || o.shippingAddress?.fullName || o.customerName || 'Clinician Member',
-          o.shippingInfo?.email || o.shippingAddress?.email || o.customerEmail || 'N/A',
-          o.shippingInfo?.phone || o.shippingAddress?.phone || o.customerPhone || 'N/A',
+          o.id,
+          o.shippingInfo?.name || 'Guest',
+          o.shippingInfo?.email || 'N/A',
+          o.shippingInfo?.phone || 'N/A',
           finalAddress,
-          o.total || '0 DA',
-          formattedDate,
+          o.total || 0,
+          o.createdAt ? String(o.createdAt) : 'N/A',
           o.status || 'pending',
           itemsList
         ]);
@@ -851,72 +817,73 @@ export default function GoogleSheetsManager() {
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `Joamedic_Orders_Backup_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.setAttribute("download", `Joamedic_Orders_${new Date().toISOString().slice(0, 10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      setSuccessMsg("Orders transaction log successfully exported as local CSV file!");
-      setTimeout(() => setSuccessMsg(null), 5000);
-    } catch (err: any) {
-      console.error(err);
+    } catch (_) {
       setError("Failed to generate local Orders CSV backup.");
     }
   };
+
+  const filteredOrders = orders.filter(
+    (o) =>
+      o.id.toLowerCase().includes(orderQuery.toLowerCase()) ||
+      (o.shippingInfo?.name && o.shippingInfo.name.toLowerCase().includes(orderQuery.toLowerCase())) ||
+      (o.shippingInfo?.phone && o.shippingInfo.phone.includes(orderQuery))
+  );
 
   if (loadingConfig) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-white bg-slate-950 min-h-[300px]">
         <Loader className="animate-spin text-teal-400 mb-2" size={32} />
-        <p className="text-sm text-white/60">Fetching Google Sheets workspace setups...</p>
+        <p className="text-sm text-white/50">Loading Google workspace registry...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="space-y-8 max-w-6xl">
       {/* Title */}
-      <div>
-        <h1 className="text-3xl font-display font-semibold tracking-tight text-white flex items-center gap-3">
-          <FileSpreadsheet className="text-teal-400" size={32} /> Google Sheets Integration
+      <div className="bg-gradient-to-r from-teal-500/10 via-teal-500/5 to-transparent border border-teal-500/10 rounded-2xl p-6 relative overflow-hidden backdrop-blur-md">
+        <div className="absolute right-0 top-0 w-32 h-32 bg-teal-500/5 blur-3xl rounded-full"></div>
+        <h1 className="text-2xl md:text-3xl font-display font-semibold tracking-tight text-white flex items-center gap-3">
+          <FileSpreadsheet className="text-teal-400" size={30} /> Google Sheets Integration Hub
         </h1>
-        <p className="text-sm text-white/50 mt-1.5 leading-relaxed">
-          Surgical and clinical management. Directly export, log, and synchronize products catalog and medical client transactions directly onto official Google Sheets.
+        <p className="text-xs text-white/60 mt-1.5 leading-relaxed max-w-3xl">
+          Automated clinical bookkeeping. Manage individual medical apparel orders, search client entries, and synchronize products catalog directly to real-time Google Sheets.
         </p>
+
+        {/* Authentication Frame Bypass Helper */}
+        <div className="mt-4 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-teal-500/5 p-3 rounded-xl border border-teal-500/10">
+          <div className="flex gap-2 text-xs text-teal-300">
+            <Info size={16} className="shrink-0 mt-0.5" />
+            <p className="leading-normal">
+              <strong>Iframe Context Tip:</strong> If Google Login fails to open because popups are restricted in nested frame sandboxes, click the button to open Joamedic in a dedicated tab.
+            </p>
+          </div>
+          <button
+            onClick={() => window.open(window.location.origin, '_blank')}
+            className="px-3.5 py-1.5 bg-teal-500 text-black rounded-lg text-xs font-bold transition-all hover:bg-teal-400 inline-flex items-center gap-1.5 uppercase tracking-wider shrink-0"
+          >
+            Open in New Tab <ArrowUpRight size={13} />
+          </button>
+        </div>
       </div>
 
-      {/* Notifications banner */}
+      {/* Notifications */}
       <AnimatePresence mode="popLayout">
         {error && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }} 
             animate={{ opacity: 1, y: 0 }} 
             exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-red-500/15 border border-red-500/20 text-red-300 rounded-2xl flex flex-col gap-3.5 text-sm"
+            className="p-4 bg-red-500/15 border border-red-500/20 text-red-300 rounded-xl flex items-start gap-3 text-xs"
           >
-            <div className="flex items-start gap-3">
-              <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={18} />
-              <div>
-                <p className="font-semibold text-red-200">Synchronization Alert</p>
-                <p className="text-white/70 text-xs mt-1 leading-relaxed">{error}</p>
-              </div>
-            </div>
-
-            {/* Direct fallback CSV downloads if connection is flaky/blocked */}
-            <div className="flex flex-wrap gap-2.5 sm:pl-7">
-              <button 
-                type="button"
-                onClick={downloadProductsCSV}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/20 rounded-lg text-xs text-teal-300 hover:text-white transition-all flex items-center gap-1.5 font-medium shrink-0"
-              >
-                <FileDown size={12} /> Download Products Backup (CSV)
-              </button>
-              <button 
-                type="button"
-                onClick={downloadOrdersCSV}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 hover:border-white/20 rounded-lg text-xs text-teal-300 hover:text-white transition-all flex items-center gap-1.5 font-medium shrink-0"
-              >
-                <FileDown size={12} /> Download Orders Backup (CSV)
-              </button>
+            <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={16} />
+            <div>
+              <p className="font-semibold text-red-200">Synchronization Error</p>
+              <p className="text-white/70 mt-1 leading-relaxed">{error}</p>
             </div>
           </motion.div>
         )}
@@ -926,12 +893,12 @@ export default function GoogleSheetsManager() {
             initial={{ opacity: 0, y: -10 }} 
             animate={{ opacity: 1, y: 0 }} 
             exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-emerald-500/15 border border-emerald-500/20 text-emerald-300 rounded-2xl flex items-start gap-3 text-sm"
+            className="p-4 bg-emerald-500/15 border border-emerald-500/20 text-emerald-300 rounded-xl flex items-start gap-3 text-xs"
           >
-            <Check className="text-emerald-400 shrink-0 mt-0.5" size={18} />
+            <CheckCircle2 className="text-emerald-400 shrink-0 mt-0.5" size={16} />
             <div>
-              <p className="font-semibold">Success</p>
-              <p className="text-white/70 text-xs mt-0.5">{successMsg}</p>
+              <p className="font-semibold text-emerald-200 font-display">Action Resolved</p>
+              <p className="text-white/70 mt-0.5 leading-relaxed">{successMsg}</p>
             </div>
           </motion.div>
         )}
@@ -939,11 +906,11 @@ export default function GoogleSheetsManager() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Left column: OAuth Linkage */}
+        {/* Left Column Controls */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Power size={18} className="text-teal-400" /> API State Control
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-4">
+            <h3 className="font-semibold text-white flex items-center gap-2 text-sm uppercase tracking-wider text-white/90">
+              <Power size={16} className="text-teal-400" /> authorization
             </h3>
 
             {accessToken ? (
@@ -952,58 +919,46 @@ export default function GoogleSheetsManager() {
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></div>
                   <div>
                     <p className="text-xs font-semibold text-emerald-300">Authorized & Connected</p>
-                    <p className="text-[10px] text-white/40 mt-0.5 font-mono">Token: active in-memory</p>
+                    <p className="text-[9px] text-white/40 mt-0.5 font-mono">Scope: spreadsheets, drive</p>
                   </div>
                 </div>
 
-                <div className="text-white/60 text-xs py-1">
-                  You are fully authenticated and can push active clinical apparel data straight to Drive.
-                </div>
+                <p className="text-xs text-white/50 leading-relaxed">
+                  Authentication token is active. You can now synchronize, write, and modify spreadsheets directly.
+                </p>
 
                 <button
                   onClick={disconnectSheets}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 hover:text-red-200 rounded-xl text-xs font-semibold transition-all uppercase tracking-wider"
+                  className="w-full text-center py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-300 rounded-xl text-xs font-bold transition-all uppercase tracking-wider"
                 >
                   Disconnect Token
                 </button>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center gap-3 bg-white/5 border border-white/5 rounded-xl p-3">
-                  <div className="w-2.5 h-2.5 rounded-full bg-white/30 shrink-0"></div>
-                  <div>
-                    <p className="text-xs font-semibold text-white/50">Token Unavailable</p>
-                    <p className="text-[10px] text-white/40 mt-0.5 font-mono">Status: offline</p>
-                  </div>
-                </div>
-
                 <p className="text-xs text-white/50 leading-relaxed">
-                  Connection with the Google Sheets API is secure. Authorize the application to read and write spreadsheets in your workspace.
+                  Google Secure Login links our clinical databases to your personalized Spreadsheet files.
                 </p>
 
                 <button
                   onClick={connectGoogleSheets}
                   disabled={connecting}
-                  className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-xl text-xs transition-all uppercase tracking-wider disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2.5 px-4 py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-xl text-xs uppercase tracking-widest transition-all disabled:opacity-50"
                 >
-                  {connecting ? (
-                    <Loader size={16} className="animate-spin" />
-                  ) : (
-                    <FileSpreadsheet size={16} />
-                  )}
-                  Connect Google Sheets
+                  {connecting ? <Loader size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
+                  Google Login
                 </button>
               </div>
             )}
           </div>
 
-          {/* Apps Script Webhook Alternative */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-xs space-y-4 shadow-lg backdrop-blur-xl">
-            <h4 className="font-semibold text-white flex items-center gap-2 text-sm">
-              <Database size={16} className="text-teal-400" /> Webhook Integration
+          {/* Webhook Alternative */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4 shadow-lg backdrop-blur-xl">
+            <h4 className="font-semibold text-white flex items-center gap-2 text-sm uppercase tracking-wider text-white/90">
+              <Database size={16} className="text-teal-400" /> Webhook Backup
             </h4>
-            <p className="text-white/60 leading-relaxed text-[11px]">
-              If browser ad-blockers block direct Google Sheets API communication, you can bypass OAuth by entering a normal Google Apps Script Web App Webhook URL instead.
+            <p className="text-white/60 leading-normal text-[11px]">
+              If browser policies disrupt Google Auth, bypass login by entering a Google Apps Script Web App URL below instead:
             </p>
             
             <input
@@ -1014,19 +969,19 @@ export default function GoogleSheetsManager() {
               className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:border-teal-400/50 text-white font-mono text-[11px] placeholder:text-white/20 transition-all hover:border-white/20"
             />
             
-            <div className="flex justify-between items-center gap-2">
+            <div className="flex justify-between items-center gap-2 pt-2">
               <button
                 onClick={() => setShowScriptInfo(!showScriptInfo)}
                 className="text-teal-400 hover:text-teal-300 text-[10px] uppercase tracking-wider font-bold transition-colors"
               >
-                {showScriptInfo ? "Hide Script Details" : "Show App Script Setup"}
+                {showScriptInfo ? "Hide Code" : "Script Code"}
               </button>
               
               <button
                 onClick={handleSaveWebhook}
                 className="px-4 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-300 rounded-lg text-xs font-semibold transition-all shadow-md"
               >
-                Save URL
+                Save webapp
               </button>
             </div>
             
@@ -1036,19 +991,9 @@ export default function GoogleSheetsManager() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="bg-slate-900 border border-white/10 rounded-xl p-3 pb-4 text-[10px] text-teal-100/70 font-mono overflow-auto max-h-60 mt-2 whitespace-pre"
+                  className="bg-slate-900 border border-white/10 rounded-xl p-3 text-[10px] text-teal-100/70 font-mono overflow-auto max-h-56 mt-2 whitespace-pre"
                 >
-{`/* 
-1. Open Google Sheets > Extensions > Apps Script
-2. Paste this code
-3. Click "Deploy" > "New deployment"
-4. Types: Web App
-5. Execute as: Me
-6. Who has access: Anyone
-7. Copy the Web App URL and paste it above 
-*/
-
-function doPost(e) {
+{`function doPost(e) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   var payload = JSON.parse(e.postData.contents);
   var action = payload.action;
@@ -1057,38 +1002,16 @@ function doPost(e) {
   if (action === 'sync_orders') {
     var ms = sheet.getSheetByName("Orders") || sheet.insertSheet("Orders");
     ms.clear();
-    if(rows.length > 0) {
-      ms.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-    }
+    if(rows.length > 0) ms.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
   } else if (action === 'add_order') {
     var ms = sheet.getSheetByName("Orders") || sheet.insertSheet("Orders");
-    if (ms.getLastRow() === 0) {
-      // Create headers if empty
-      ms.appendRow([
-        'Order ID',
-        'Customer Name',
-        'Customer Email',
-        'Deliverable Phone',
-        'Clinie / Station Address',
-        'Order Total Amount',
-        'Transaction Timestamp',
-        'Fulfillment Status',
-        'Purchased items detail'
-      ]);
-    }
-    if (rows && rows.length > 0) {
-      ms.appendRow(rows[0]);
-    }
+    if(rows && rows.length > 0) ms.appendRow(rows[0]);
   } else if (action === 'sync_products') {
     var ps = sheet.getSheetByName("Products") || sheet.insertSheet("Products");
     ps.clear();
-    if(rows.length > 0) {
-      ps.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-    }
+    if(rows.length > 0) ps.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
   }
-  
-  return ContentService.createTextOutput(JSON.stringify({success: true}))
-                       .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify({success: true})).setMimeType(ContentService.MimeType.JSON);
 }`}
                 </motion.div>
               )}
@@ -1096,25 +1019,25 @@ function doPost(e) {
           </div>
         </div>
 
-        {/* Right column: Spreadsheet integration & Sync buttons */}
+        {/* Right Column Core Workspace and Orders Synchronization Finder */}
         <div className="lg:col-span-2 space-y-6">
 
-          {/* Sheet Registry */}
+          {/* Active Target */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Database size={18} className="text-teal-400" /> Active Spreadsheet Target
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
+              <Database size={16} className="text-teal-400" /> target spreadsheet
             </h3>
 
             {config.spreadsheetId ? (
               <div className="space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-white/5 border border-white/10 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="min-w-0 flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
                       <FileSpreadsheet size={20} />
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-white truncate max-w-[280px]">
-                        {config.spreadsheetTitle || 'Active Store Database'}
+                        {config.spreadsheetTitle || 'Registered Spreadsheet'}
                       </p>
                       <p className="text-[11px] text-white/40 mt-0.5 font-mono truncate max-w-[280px]">
                         ID: {config.spreadsheetId}
@@ -1127,69 +1050,64 @@ function doPost(e) {
                       href={config.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-300 rounded-lg text-xs transition-colors shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-300 rounded-lg text-xs font-semibold transition-colors shrink-0"
                     >
                       <ExternalLink size={12} /> Open Sheet
                     </a>
                     
                     <button
                       onClick={unlinkSpreadsheet}
-                      className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 rounded-lg text-xs transition-colors shrink-0 font-medium"
+                      className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 rounded-lg text-xs font-medium transition-colors shrink-0"
                     >
-                      Unlink Target
+                      Unlink
                     </button>
                   </div>
                 </div>
 
-                {config.lastSyncedAt && (
-                  <p className="text-[11px] text-teal-400/80 font-mono">
-                    Last synchronizations completed at: {config.lastSyncedAt}
-                  </p>
-                )}
+                <div className="flex justify-between items-center text-[11px] text-white/40">
+                  <span>Target mapped correctly.</span>
+                  {config.lastSyncedAt && (
+                    <span className="font-mono text-teal-400/80">Last Sync: {config.lastSyncedAt}</span>
+                  )}
+                </div>
               </div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="p-4 bg-yellow-500/5 border border-yellow-500/15 rounded-xl text-xs text-yellow-300/80 leading-relaxed flex items-start gap-2.5">
                   <AlertCircle className="shrink-0 mt-0.5" size={16} />
-                  No spreadsheet is currently mapped to this clinician portal. Please choose the "joamedic" spreadsheet option to automatically discover or deploy it:
+                  No spreadsheet mapped yet. Click "Use Spreadsheet joamedic" to auto-create, or provide a custom spreadsheet ID.
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Create New / Discover joamedic */}
                   <div className="border border-white/10 rounded-xl p-4 bg-white/5 flex flex-col justify-between">
                     <div>
-                      <p className="font-semibold text-white text-xs uppercase tracking-wider text-teal-400">Discover "joamedic" Sheet</p>
-                      <p className="text-xs text-white/50 mt-1.5 leading-relaxed">
-                        Instantly look for an existing spreadsheet named "joamedic" in your Drive. If none exists, we will automatically set up and format a brand new one.
+                      <p className="font-semibold text-white text-xs uppercase tracking-wider text-teal-400">Deploy "joamedic" Spreadsheet</p>
+                      <p className="text-[11px] text-white/50 mt-1 leading-relaxed">
+                        Searches your Drive for a checklist named "joamedic". If none is found, we automatically allocate and format a new spreadsheet.
                       </p>
                     </div>
                     <button
                       onClick={handleCreateNewSpreadsheet}
                       disabled={!accessToken || creatingSheet}
-                      className="w-full mt-4 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-teal-500 hover:bg-teal-400 text-black text-xs font-semibold rounded-xl uppercase tracking-wider transition-all disabled:opacity-40"
+                      className="w-full mt-4 flex items-center justify-center gap-1.5 px-4 py-2 bg-teal-500 hover:bg-teal-400 text-black text-xs font-bold rounded-xl uppercase tracking-wider transition-all disabled:opacity-40"
                     >
-                      {creatingSheet ? (
-                        <Loader size={14} className="animate-spin" />
-                      ) : (
-                        <Check size={14} />
-                      )}
-                      Use Spreadsheet "joamedic"
+                      {creatingSheet ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
+                      Use joamedic
                     </button>
                   </div>
 
-                  {/* Manual ID link */}
-                  <div className="border border-white/10 rounded-xl p-4 bg-white/5 flex flex-col justify-between">
+                  <form onSubmit={handleLinkManualSpreadsheet} className="border border-white/10 rounded-xl p-4 bg-white/5 flex flex-col justify-between">
                     <div>
-                      <p className="font-semibold text-white text-xs uppercase tracking-wider text-teal-400">Manual Mapping</p>
-                      <p className="text-xs text-white/50 mt-1.5 leading-relaxed">
-                        Manually map an existing Google Spreadsheet ID or full URL from your clipboard to this admin console.
+                      <p className="font-semibold text-white text-xs uppercase tracking-wider text-teal-400 font-display">manual link</p>
+                      <p className="text-[11px] text-white/50 mt-1 leading-relaxed">
+                        Manually link an existing sheet from your workspace by pasting its ID or full URL below:
                       </p>
                     </div>
                     
-                    <form onSubmit={handleLinkManualSpreadsheet} className="mt-4 flex gap-2">
+                    <div className="mt-4 flex gap-2">
                       <input
                         type="text"
-                        placeholder="Enter Link or Spreadsheet ID"
+                        placeholder="Spreadsheet URL or ID"
                         value={manualSheetId}
                         onChange={(e) => setManualSheetId(e.target.value)}
                         className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-teal-500 text-white flex-1 min-w-0"
@@ -1197,125 +1115,164 @@ function doPost(e) {
                       <button
                         type="submit"
                         disabled={!manualSheetId.trim()}
-                        className="px-3 py-2 bg-teal-500/20 hover:bg-teal-500 border border-teal-500/20 hover:text-black text-teal-300 rounded-lg text-xs transition-all shrink-0 font-bold"
+                        className="px-3 bg-teal-500/20 hover:bg-teal-500 border border-teal-500/20 text-teal-300 hover:text-black rounded-lg text-xs font-bold"
                       >
-                        Link
+                        Map
                       </button>
-                    </form>
-                  </div>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Sync operations list */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <RefreshCw size={18} className="text-teal-400" /> Google Sheets Bi-directional Sync Hub
-            </h3>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-lg">
-                    <Database size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-semibold text-white uppercase tracking-wider">Sync Products Catalog</h4>
-                    <p className="text-[11px] text-white/40">Rewriting stock, colors, titles, and price data onto the sheet</p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleSyncProducts}
-                  disabled={!accessToken || !config.spreadsheetId || syncingProducts}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-300 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-30 disabled:pointer-events-none"
-                >
-                  {syncingProducts ? <Loader size={12} className="animate-spin" /> : <FileDown size={12} />}
-                  Export Products
-                </button>
+          {/* Rebuilt Search & Manage & Synchronize Orders Area */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="font-semibold text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+                  <Search size={16} className="text-teal-400" /> Manage & Synchronize Orders
+                </h3>
+                <p className="text-xs text-white/40 mt-0.5">Filter the clinical database and push distinct order logs onto Sheets manually.</p>
               </div>
 
-              <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-lg">
-                    <FileSpreadsheet size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-semibold text-white uppercase tracking-wider">Sync Orders to Sheet</h4>
-                    <p className="text-[11px] text-white/40">Push Firestore orders to Spreadsheet for client tracking and shipping</p>
-                  </div>
-                </div>
+              <div className="flex gap-2 w-full sm:w-auto shrink-0">
                 <button
                   onClick={handleSyncOrders}
-                  disabled={!accessToken || !config.spreadsheetId || syncingOrders}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-300 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-30 disabled:pointer-events-none"
+                  disabled={syncingOrders || (!accessToken && !config.webAppUrl)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-500 text-black text-xs font-bold rounded-xl uppercase tracking-wider transition-all disabled:opacity-40"
                 >
-                  {syncingOrders ? <Loader size={12} className="animate-spin" /> : <FileDown size={12} />}
-                  Export Orders
+                  {syncingOrders ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  Sync All Orders
+                </button>
+                <button
+                  onClick={handleSyncProducts}
+                  disabled={syncingProducts || (!accessToken && !config.webAppUrl)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 border border-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl uppercase tracking-wider transition-all disabled:opacity-40"
+                >
+                  {syncingProducts ? <Loader size={12} className="animate-spin" /> : <Database size={12} />}
+                  Sync Products
                 </button>
               </div>
+            </div>
 
-              <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-lg">
-                    <FileUp size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-semibold text-white uppercase tracking-wider">Control & Pull Orders from Sheet</h4>
-                    <p className="text-[11px] text-white/40">Import edits from Google Sheet (statuses, addresses, names) back into Firestore</p>
-                  </div>
+            {/* Search Input */}
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+              <input
+                type="text"
+                placeholder="Search orders in sheets section by ID, Customer Name, or Phone..."
+                value={orderQuery}
+                onChange={(e) => setOrderQuery(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-xs focus:outline-none focus:border-teal-400/50 transition-colors placeholder:text-white/30 text-white"
+              />
+            </div>
+
+            {/* Orders Table inside Google Sheets Tab */}
+            {loadingOrders ? (
+              <div className="flex justify-center items-center py-10">
+                <Loader className="animate-spin text-teal-400 mr-2" size={20} />
+                <span className="text-xs text-white/50 font-mono">Scanning live order files...</span>
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="border border-white/5 bg-white/5 rounded-xl text-center py-10 text-xs text-white/40">
+                No orders discovered matching search filter "{orderQuery}".
+              </div>
+            ) : (
+              <div className="border border-white/15 bg-slate-900/40 rounded-xl overflow-hidden max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+                <table className="w-full text-left text-xs text-white/80">
+                  <thead className="bg-white/5 border-b border-white/10 font-semibold text-white/60 sticky top-0 bg-slate-900 z-10">
+                    <tr>
+                      <th className="px-4 py-3">Order ID</th>
+                      <th className="px-4 py-3">Customer</th>
+                      <th className="px-4 py-3">Total (DA)</th>
+                      <th className="px-4 py-3">Fulfillment</th>
+                      <th className="px-4 py-3 text-right">Synchronization</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-mono">
+                    {filteredOrders.map((ord) => (
+                      <tr key={ord.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-teal-400">{ord.id}</td>
+                        <td className="px-4 py-3 font-sans truncate max-w-[140px]" title={ord.shippingInfo?.name}>
+                          {ord.shippingInfo?.name || 'Guest User'}
+                        </td>
+                        <td className="px-4 py-3 text-white/90">{ord.total ? ord.total.toLocaleString() : '0'} DA</td>
+                        <td className="px-4 py-3 font-sans">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                            ord.status === 'processing' ? 'bg-yellow-500/20 text-yellow-300' :
+                            ord.status === 'shipped' ? 'bg-blue-500/20 text-blue-300' :
+                            ord.status === 'cancelled' ? 'bg-red-500/20 text-red-300' :
+                            'bg-teal-500/20 text-teal-300'
+                          }`}>
+                            {ord.status || 'processing'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-sans">
+                          <button
+                            onClick={() => handleSyncSingleOrder(ord.id)}
+                            disabled={singleSyncId !== null || (!accessToken && !config.webAppUrl)}
+                            className="px-2.5 py-1 text-[10px] bg-teal-500/20 hover:bg-teal-500 text-teal-300 hover:text-black font-bold uppercase rounded-md transition-all border border-teal-500/20 disabled:opacity-40"
+                          >
+                            {singleSyncId === ord.id ? (
+                              <Loader size={10} className="animate-spin inline mr-1" />
+                            ) : (
+                              <ArrowRight size={10} className="inline mr-1" />
+                            )}
+                            Sync Row
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Sync operations list */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl space-y-4">
+            <h3 className="font-semibold text-white flex items-center gap-2 text-sm uppercase tracking-wider">
+              <RefreshCw size={16} className="text-teal-400" /> Administrative Sheets Control
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all gap-4">
+                <div className="min-w-0">
+                  <h4 className="text-xs font-semibold text-white uppercase tracking-wider">Import Statuses from Sheet</h4>
+                  <p className="text-[10px] text-white/40 mt-0.5 leading-snug">Pull order adjustments edited directly inside Google Sheets.</p>
                 </div>
                 <button
                   onClick={handlePullOrders}
                   disabled={!accessToken || !config.spreadsheetId || pullingOrders}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-300 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-30 disabled:pointer-events-none"
+                  className="flex items-center gap-1 px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/20 text-teal-300 rounded-lg text-xs font-bold uppercase transition-all disabled:opacity-30 shrink-0"
                 >
                   {pullingOrders ? <Loader size={12} className="animate-spin" /> : <FileUp size={12} />}
                   Pull Orders
                 </button>
               </div>
 
-              {/* Offline / Ad-blocker CSV Fallback Card */}
-              <div className="p-4 bg-teal-500/5 border border-teal-500/10 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-6">
-                <div>
-                  <h4 className="text-xs font-semibold text-teal-400 flex items-center gap-1.5 uppercase tracking-wider mb-1">
-                    <FileDown size={14} /> Offline / Ad-Blocker CSV Fallback
-                  </h4>
-                  <p className="text-[11px] text-white/50 leading-relaxed">
-                    If Google Sheets servers are restricted by your browser ad-blockers, Brave Shields, or connection errors, download immediate backups as raw CSV spreadsheet files.
-                  </p>
+              <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-xl hover:bg-white/10 transition-all gap-4">
+                <div className="min-w-0">
+                  <h4 className="text-xs font-semibold text-white uppercase tracking-wider">CSV Spreadsheet Backup</h4>
+                  <p className="text-[10px] text-white/40 mt-0.5 leading-snug">Download local CSV backups of the clinical registry instantly.</p>
                 </div>
-                <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0 shrink-0">
-                  <button 
-                    type="button"
+                <div className="flex gap-1 shrink-0">
+                  <button
                     onClick={downloadProductsCSV}
-                    className="w-full sm:w-auto px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white hover:text-teal-300 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1 uppercase tracking-wider font-bold"
+                    className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white"
+                    title="Export Products CSV"
                   >
-                    CSV Products
+                    <FileDown size={14} className="text-teal-400" />
                   </button>
-                  <button 
-                    type="button"
+                  <button
                     onClick={downloadOrdersCSV}
-                    className="w-full sm:w-auto px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white hover:text-teal-300 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1 uppercase tracking-wider font-bold"
+                    className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-white"
+                    title="Export Orders CSV"
                   >
-                    CSV Orders
+                    <FileDown size={14} className="text-blue-400" />
                   </button>
                 </div>
-              </div>
-
-              <div className="pt-4 border-t border-white/10 flex justify-end">
-                <button
-                  onClick={handleSyncAll}
-                  disabled={!accessToken || !config.spreadsheetId || syncingProducts || syncingOrders || pullingOrders}
-                  className="flex items-center gap-2 px-5 py-3 bg-teal-500 text-black rounded-xl text-xs font-semibold uppercase tracking-wider hover:bg-teal-400 transition-all shadow-[0_0_20px_rgba(45,212,191,0.2)] disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  {(syncingProducts || syncingOrders || pullingOrders) ? (
-                    <Loader size={14} className="animate-spin" />
-                  ) : (
-                    <RefreshCw size={14} />
-                  )}
-                  Full Core Database Sync
-                </button>
               </div>
             </div>
           </div>

@@ -8,7 +8,6 @@ import Hero from './components/Hero';
 import ProductGrid from './components/ProductGrid';
 import FabricTech from './components/FabricTech';
 import OurStory from './components/OurStory';
-import FAQ from './components/FAQ';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import { LanguageProvider } from './i18n/LanguageContext';
@@ -84,8 +83,6 @@ function AppContent() {
         <FabricTech />
         <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
         <OurStory />
-        <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
-        <FAQ />
         <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
         <Contact />
       </main>
