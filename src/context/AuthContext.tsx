@@ -88,7 +88,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         try {
           await setDoc(docRef, newProfile);
-        } catch (_) {}
+        } catch (dbErr) {
+          console.error("Firestore user profile initialization error during login:", dbErr);
+        }
         setUserProfile(newProfile);
         localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(newProfile));
       }
@@ -141,7 +143,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await setDoc(doc(db, 'users', currentUser.uid), profileData);
     } catch (err) {
-      console.warn("Could not write Firestore record during sign up:", err);
+      console.error("Could not write Firestore record during sign up:", err);
+      throw new Error("Failed to register your profile in the medical directory: " + (err instanceof Error ? err.message : String(err)));
     }
     
     localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(profileData));

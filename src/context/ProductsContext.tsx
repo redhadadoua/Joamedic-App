@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { collection, getDocs, getDocsFromCache, setDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, getDocsFromCache, setDoc, doc, deleteDoc, writeBatch, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Product } from './CartContext';
 import { products as initialProducts } from '../data/products';
@@ -87,17 +87,34 @@ export const ProductsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const fetchedList: Product[] = [];
           serverSnapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            fetchedList.push({
-              id: Number(docSnap.id),
-              name: data.name,
-              category: data.category,
-              price: data.price,
-              image: data.image,
-              color: data.color,
-              specs: data.specs || [],
-              description: data.description || '',
+            const id = Number(docSnap.id);
+            const initialMatch = initialProducts.find(p => p.id === id);
+            const correctProduct = {
+              id: id,
+              name: initialMatch ? initialMatch.name : data.name,
+              category: initialMatch ? initialMatch.category : data.category,
+              price: initialMatch ? initialMatch.price : data.price,
+              image: initialMatch ? initialMatch.image : data.image,
+              color: initialMatch ? initialMatch.color : data.color,
+              specs: initialMatch ? initialMatch.specs : (data.specs || []),
+              description: initialMatch ? initialMatch.description : (data.description || ''),
               stock: data.stock !== undefined ? data.stock : 10
-            } as Product);
+            } as Product;
+            
+            fetchedList.push(correctProduct);
+            
+            // If the database data is outdated, silently update it in Firestore
+            if (initialMatch && (data.name !== initialMatch.name || data.image !== initialMatch.image)) {
+              updateDoc(doc(db, 'products', String(id)), {
+                name: initialMatch.name,
+                image: initialMatch.image,
+                category: initialMatch.category,
+                price: initialMatch.price,
+                color: initialMatch.color,
+                specs: initialMatch.specs,
+                description: initialMatch.description
+              }).catch(e => console.warn('Silent product document sync failed:', e));
+            }
           });
           
           // Sort products by original ID order

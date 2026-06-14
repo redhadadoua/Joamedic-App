@@ -10,7 +10,7 @@ import imgSamiSdqc from '../assets/images/sami sdqc.jpg';
 export const products: Product[] = [
   {
     id: 1,
-    name: "Sami 10 Classic Blue",
+    name: "Sami 10",
     category: "Premium Scrubs",
     price: "3700 DA",
     image: imgSami10,
@@ -20,7 +20,7 @@ export const products: Product[] = [
   },
   {
     id: 2,
-    name: "Sami 10sc Athletic Slim",
+    name: "Sami 10sc",
     category: "Slim-Fit Scrubs",
     price: "3700 DA",
     image: imgSami10sc,
@@ -30,7 +30,7 @@ export const products: Product[] = [
   },
   {
     id: 3,
-    name: "Sami 11 Ultra Care",
+    name: "Sami 11",
     category: "Women's Scrubs",
     price: "3700 DA",
     image: imgSami11,
@@ -40,7 +40,7 @@ export const products: Product[] = [
   },
   {
     id: 4,
-    name: "Sami SDQC Professional Dress",
+    name: "Sami SDQC",
     category: "Clinical Suits",
     price: "3700 DA",
     image: imgSamiSdqc,
@@ -50,7 +50,7 @@ export const products: Product[] = [
   },
   {
     id: 5,
-    name: "Joamedic Premium 013",
+    name: "013",
     category: "Men's Scrubs",
     price: "3700 DA",
     image: img013,
@@ -60,7 +60,7 @@ export const products: Product[] = [
   },
   {
     id: 6,
-    name: "Joamedic Lab Coat 012",
+    name: "012",
     category: "Lab Coats",
     price: "3700 DA",
     image: img012,
@@ -70,7 +70,7 @@ export const products: Product[] = [
   },
   {
     id: 7,
-    name: "Joamedic Signature 011",
+    name: "011",
     category: "Exclusive Scrubs",
     price: "3700 DA",
     image: img011,

@@ -358,6 +358,11 @@ interface DbUser {
   createdAt?: any;
   role?: string;
   phoneNumber?: string;
+  isBlocked?: boolean;
+  isSuspended?: boolean;
+  isVerified?: boolean;
+  verificationTitle?: string;
+  customBadgeColor?: string;
 }
 
 interface DbContact {
@@ -2091,7 +2096,7 @@ function SettingsManager() {
       const { products } = await import('../data/products');
       
       for (const p of products) {
-        const docRef = doc(db, 'products', p.id);
+        const docRef = doc(db, 'products', String(p.id));
         await setDoc(docRef, p);
       }
       
