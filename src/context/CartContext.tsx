@@ -40,7 +40,11 @@ interface CartContextType {
   clearCart: () => void;
   cartTotal: number;
   cartCount: number;
-  placeOrder: (shippingInfo: any, userId?: string) => Promise<string>;
+  placeOrder: (
+    shippingInfo: any, 
+    userId?: string, 
+    onProgress?: (step: 'preparing' | 'local_backup' | 'firestore' | 'google_sheets' | 'done') => void
+  ) => Promise<string>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -90,7 +94,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const cartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
-  const placeOrder = async (shippingInfo: any, userId: string = 'guest'): Promise<string> => {
+  const placeOrder = async (
+    shippingInfo: any, 
+    userId: string = 'guest',
+    onProgress?: (step: 'preparing' | 'local_backup' | 'firestore' | 'google_sheets' | 'done') => void
+  ): Promise<string> => {
+    onProgress?.('preparing');
     const generatedOrderId = `JM-${Math.floor(10000 + Math.random() * 90000)}`;
     
     const orderData = {
@@ -123,6 +132,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // 2. Backup write to localStorage immediately so it is instantly available in order history
+    onProgress?.('local_backup');
     const existingLocalOrders = JSON.parse(localStorage.getItem('backup_orders') || '[]');
     const backupOrder = {
       id: generatedOrderId,
@@ -134,6 +144,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // 3. Await Firestore document creation to guarantee security & absolute persistence on the server
+    onProgress?.('firestore');
     try {
       await setDoc(doc(db, 'orders', generatedOrderId), {
         ...orderData,
@@ -152,8 +163,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       handleFirestoreError(firestoreErr, OperationType.WRITE, `orders/${generatedOrderId}`);
     }
 
-    // 4. If a Google Sheets webhook exists, append the order details immediately to Google Sheets without silent failures
+    // 4. If a Google Sheets webhook exists, append the order details immediately to Google Sheets without silent failures (robust 3-attempt retry)
     if (webAppUrl) {
+      onProgress?.('google_sheets');
       try {
         const itemsDetail = cartItems.map((i: any) => 
           `${i.name} (Color: ${i.color || 'N/A'}, Size: ${i.size || 'N/A'}, Qty: ${i.quantity || 1})`
@@ -177,25 +189,45 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           itemsDetail
         ];
 
-        // Trigger append row to Google Sheet using text/plain to avoid CORS problems in production web applications
-        const webhookRes = await fetch(webAppUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'add_order', data: [newOrderRow] })
-        });
+        let webhookRes;
+        let attempts = 3;
+        let success = false;
+        let finalErr = null;
 
-        if (!webhookRes.ok) {
-          throw new Error(`Google Sheets Web App responded with HTTP status ${webhookRes.status}`);
+        for (let i = 0; i < attempts; i++) {
+          try {
+            webhookRes = await fetch(webAppUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain' },
+              body: JSON.stringify({ action: 'add_order', data: [newOrderRow] })
+            });
+
+            if (!webhookRes.ok) {
+              throw new Error(`Google Web App returned status ${webhookRes.status}`);
+            }
+
+            const text = await webhookRes.text();
+            try {
+              const parsed = JSON.parse(text);
+              if (parsed && parsed.success === false) {
+                throw new Error(parsed.error || "Execution error in Google Apps Script.");
+              }
+            } catch (jsonErr: any) {
+              console.warn("Could not parse Apps Script response as JSON, proceeding:", text);
+            }
+            success = true;
+            break; // sync successful!
+          } catch (err: any) {
+            console.warn(`Google Sheets synchronization attempt ${i + 1} of ${attempts} failed:`, err);
+            finalErr = err;
+            if (i < attempts - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1200)); // wait 1.2s before automatic retry
+            }
+          }
         }
 
-        const text = await webhookRes.text();
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed && parsed.success === false) {
-            throw new Error(parsed.error || "Google Sheets Apps Script reported execution failure.");
-          }
-        } catch (jsonErr: any) {
-          console.warn("Could not parse Apps Script response as JSON, proceeding:", text);
+        if (!success) {
+          throw new Error(`Google Sheets integration failed after 3 attempts. ${finalErr?.message || finalErr}`);
         }
       } catch (webhookErr: any) {
         console.error("Sheets webhook preparation/trigger error:", webhookErr);
@@ -203,6 +235,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
+    onProgress?.('done');
     return generatedOrderId;
   };
 

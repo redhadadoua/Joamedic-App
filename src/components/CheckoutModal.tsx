@@ -16,6 +16,56 @@ export default function CheckoutModal() {
   const [checkoutState, setCheckoutState] = useState<'form' | 'processing' | 'success'>('form');
   const [orderId, setOrderId] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [progressStep, setProgressStep] = useState<'preparing' | 'local_backup' | 'firestore' | 'google_sheets' | 'done'>('preparing');
+
+  const getProgressLabel = (step: typeof progressStep) => {
+    if (language === 'AR') {
+      switch (step) {
+        case 'preparing':
+          return 'جاري إعداد وتحليل بيانات طلبك الطبي...';
+        case 'local_backup':
+          return 'جاري حفظ نسخة احتياك محلية في المتصفح...';
+        case 'firestore':
+          return 'جاري نقل وتأمين الطلب في قاعدة البيانات السحابية (Firestore)...';
+        case 'google_sheets':
+          return 'جاري مزامنة وتوثيق الطلب في سجل Google Sheets الإداري...';
+        case 'done':
+          return 'تم تأكيد الطلب بنجاح!';
+        default:
+          return 'جاري إرسال وتأكيد طلبك...';
+      }
+    } else if (language === 'FR') {
+      switch (step) {
+        case 'preparing':
+          return 'Préparation et validation de votre commande médicale...';
+        case 'local_backup':
+          return 'Création d\'une copie de sauvegarde locale...';
+        case 'firestore':
+          return 'Sécurisation et enregistrement permanent sur Firestore...';
+        case 'google_sheets':
+          return 'Mise à jour et synchronisation du registre Google Sheets...';
+        case 'done':
+          return 'Commande validée avec succès !';
+        default:
+          return 'Traitement de votre commande en cours...';
+      }
+    } else {
+      switch (step) {
+        case 'preparing':
+          return 'Preparing and validating clinical request data...';
+        case 'local_backup':
+          return 'Backing up order locally in offline cache...';
+        case 'firestore':
+          return 'Saving medical registry record securely to Firestore...';
+        case 'google_sheets':
+          return 'Synchronizing records securely with Google Sheets...';
+        case 'done':
+          return 'Clinical order verified successfully!';
+        default:
+          return 'Processing medical order placement...';
+      }
+    }
+  };
 
   const [shippingInfo, setShippingInfo] = useState({
     name: '', email: '', phone: '', wilaya: '', city: '', address: ''
@@ -79,10 +129,11 @@ export default function CheckoutModal() {
     e.preventDefault();
     setErrorMsg(null);
     setCheckoutState('processing');
+    setProgressStep('preparing');
     
     try {
       const userId = user ? user.uid : 'guest';
-      const generatedOrderId = await placeOrder(shippingInfo, userId);
+      const generatedOrderId = await placeOrder(shippingInfo, userId, (step) => setProgressStep(step));
       
       setOrderId(generatedOrderId);
       setCheckoutState('success');
@@ -241,7 +292,12 @@ export default function CheckoutModal() {
                        <ShieldCheck size={28} className="animate-pulse" />
                      </div>
                   </div>
-                  <p className="text-teal-300 font-medium animate-pulse text-lg tracking-wide">{t('checkout.processing')}</p>
+                  <div className="text-center space-y-2 max-w-md">
+                    <p className="text-teal-300 font-medium animate-pulse text-lg tracking-wide">{t('checkout.processing')}</p>
+                    <p className="text-white/60 text-xs font-mono max-w-xs mx-auto animate-pulse transition-all duration-300">
+                      {getProgressLabel(progressStep)}
+                    </p>
+                  </div>
                 </div>
               )}
 

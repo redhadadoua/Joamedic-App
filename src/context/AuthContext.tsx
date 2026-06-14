@@ -120,11 +120,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signUpInProgressRef = React.useRef(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        await fetchUserProfile(currentUser);
+        if (!signUpInProgressRef.current) {
+          await fetchUserProfile(currentUser);
+        }
       } else {
         setUserProfile(null);
       }
@@ -135,34 +139,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signUp = async (email: string, password: string, displayName: string, phoneNumber: string) => {
+    signUpInProgressRef.current = true;
     sessionStorage.setItem('pending_signup_displayName', displayName);
     sessionStorage.setItem('pending_signup_phoneNumber', phoneNumber);
 
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const currentUser = userCredential.user;
-    
-    await updateProfile(currentUser, { displayName });
-    
-    const profileData: UserProfile = {
-      uid: currentUser.uid,
-      email: currentUser.email,
-      displayName,
-      phoneNumber,
-      phoneVerified: false,
-      photoURL: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(displayName)}`,
-      createdAt: new Date().toISOString(),
-      role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
-    };
-
     try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const currentUser = userCredential.user;
+      
+      try {
+        await updateProfile(currentUser, { displayName });
+      } catch (profErr) {
+        console.warn("Auth displayName sync failed, continuing:", profErr);
+      }
+      
+      const profileData: UserProfile = {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        displayName,
+        phoneNumber,
+        phoneVerified: false,
+        photoURL: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(displayName)}`,
+        createdAt: new Date().toISOString(),
+        role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
+      };
+
       await setDoc(doc(db, 'users', currentUser.uid), profileData);
-    } catch (err) {
+      
+      localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(profileData));
+      setUserProfile(profileData);
+    } catch (err: any) {
       console.error("Could not write Firestore record during sign up:", err);
       throw new Error("Failed to register your profile in the medical directory: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      signUpInProgressRef.current = false;
+      if (sessionStorage.getItem('pending_signup_displayName')) {
+        sessionStorage.removeItem('pending_signup_displayName');
+      }
+      if (sessionStorage.getItem('pending_signup_phoneNumber')) {
+        sessionStorage.removeItem('pending_signup_phoneNumber');
+      }
     }
-    
-    localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(profileData));
-    setUserProfile(profileData);
   };
 
   const signIn = async (email: string, password: string) => {
