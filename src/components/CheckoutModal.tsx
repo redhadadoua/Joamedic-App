@@ -10,7 +10,7 @@ import { wilayas, getCommunesByWilayaId } from 'algeria-locations';
 
 export default function CheckoutModal() {
   const { t, language } = useLanguage();
-  const { isCheckoutOpen, setIsCheckoutOpen, cartTotal, cartItems, clearCart } = useCart();
+  const { isCheckoutOpen, setIsCheckoutOpen, cartTotal, cartItems, clearCart, placeOrder } = useCart();
   const { user, signInWithGoogle } = useAuth();
   
   const [checkoutState, setCheckoutState] = useState<'form' | 'processing' | 'success'>('form');
@@ -81,124 +81,20 @@ export default function CheckoutModal() {
     setCheckoutState('processing');
     
     try {
-      const generatedOrderId = `JM-${Math.floor(10000 + Math.random() * 90000)}`;
       const userId = user ? user.uid : 'guest';
-      
-      const orderData = {
-        userId: userId,
-        items: cartItems.map(item => ({ 
-          id: item.id, 
-          name: item.name, 
-          quantity: item.quantity, 
-          price: item.price, 
-          size: item.size || null,
-          personalization: item.personalization || null
-        })),
-        total: cartTotal,
-        status: 'processing',
-        shippingInfo: shippingInfo,
-        createdAt: new Date().toISOString() // Use standard compatible timestamp for local structure
-      };
-
-      // Fetch Google Sheets Webhook URL first in the background
-      let webAppUrl: string | null = null;
-      try {
-        const sheetsDocPromise = getDoc(doc(db, 'settings', 'google_sheets'));
-        const timeoutPromise = new Promise<any>((resolve) => setTimeout(() => resolve(null), 3000));
-        const sheetsDoc = await Promise.race([sheetsDocPromise, timeoutPromise]);
-        
-        if (sheetsDoc && sheetsDoc.exists && sheetsDoc.exists()) {
-          const sheetsData = sheetsDoc.data();
-          webAppUrl = sheetsData.webAppUrl || null;
-        }
-      } catch (configErr) {
-        console.warn("Could not load google sheets configuration:", configErr);
-      }
-
-      // Backup write to localStorage immediately so it is instantly available in order history regardless of latency
-      const existingLocalOrders = JSON.parse(localStorage.getItem('backup_orders') || '[]');
-      const backupOrder = {
-        id: generatedOrderId,
-        ...orderData
-      };
-      if (!existingLocalOrders.some((o: any) => o.id === generatedOrderId)) {
-        existingLocalOrders.push(backupOrder);
-        localStorage.setItem('backup_orders', JSON.stringify(existingLocalOrders));
-      }
-
-      // Await Firestore document creation to guarantee security & absolute persistence on the server
-      try {
-        const setDocPromise = setDoc(doc(db, 'orders', generatedOrderId), {
-          ...orderData,
-          items: cartItems.map(item => ({ 
-            id: item.id, 
-            name: item.name, 
-            quantity: item.quantity, 
-            price: item.price, 
-            size: item.size || null,
-            personalization: item.personalization || null
-          })),
-          createdAt: serverTimestamp() // Genuine Firestore serverTimestamp for db integrity
-        });
-        
-        // Wait at most 4 seconds. If offline, the promise won't resolve, but we can treat it as success locally.
-        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('timeout'), 4000));
-        await Promise.race([setDocPromise, timeoutPromise]);
-      } catch (firestoreErr: any) {
-        console.error("Firestore order placement error:", firestoreErr);
-        setErrorMsg(
-          language === 'AR' 
-            ? 'فصل الاتصال أو خطأ في التسجيل بقاعدة البيانات. يرجى تكرار المحاولة.' 
-            : language === 'FR'
-            ? 'Erreur lors de la soumission de votre commande dans la base clinique. Veuillez réessayer.'
-            : 'Error while registering your order in database. Please click Place Order again.'
-        );
-        setCheckoutState('form');
-        return;
-      }
-
-      // If a Google Sheets webhook exists, append the order details immediately to Google Sheets
-      if (webAppUrl) {
-        try {
-          const itemsDetail = cartItems.map((i: any) => 
-            `${i.name} (Color: ${i.color || 'N/A'}, Size: ${i.size || 'N/A'}, Qty: ${i.quantity || 1})`
-          ).join('; ');
-
-          const addressParts = [];
-          if (shippingInfo.address) addressParts.push(shippingInfo.address);
-          if (shippingInfo.city) addressParts.push(shippingInfo.city);
-          if (shippingInfo.wilaya) addressParts.push(shippingInfo.wilaya);
-          const finalAddress = addressParts.join(', ');
-
-          const newOrderRow = [
-            generatedOrderId,
-            shippingInfo.name || 'Guest Customer',
-            shippingInfo.email || 'N/A',
-            shippingInfo.phone || 'N/A',
-            finalAddress,
-            `${cartTotal} DA`,
-            new Date().toLocaleString(),
-            'processing',
-            itemsDetail
-          ];
-
-          // Trigger append row to Google Sheet
-          fetch(webAppUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ action: 'add_order', data: [newOrderRow] })
-          }).catch(webhookErr => {
-            console.error("Delayed sheets webhook background trigger error:", webhookErr);
-          });
-        } catch (webhookErr) {
-          console.error("Sheets webhook preparation error:", webhookErr);
-        }
-      }
+      const generatedOrderId = await placeOrder(shippingInfo, userId);
       
       setOrderId(generatedOrderId);
       setCheckoutState('success');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating order: ", error);
+      setErrorMsg(
+        language === 'AR' 
+          ? 'عذراً! واجهنا خطأ أثناء معالجة طلبك الطبي. يرجى التحقق من اتصال الشبكة وإعادة المحاولة.' 
+          : language === 'FR'
+          ? 'Désolé ! Une erreur est survenue lors du traitement de votre commande dans la base clinique. Veuillez réessayer.'
+          : 'Oops! We encountered an error while processing your clinical order. Please check your network connection and retry.'
+      );
       setCheckoutState('form');
     }
   };

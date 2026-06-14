@@ -705,39 +705,47 @@ function OverviewTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadOverviewData = async () => {
-      try {
-        setLoading(true);
-        // Fetch Orders
-        const ordersSnap = await getDocs(collection(db, 'orders'));
-        const ordersList: DbOrder[] = [];
-        ordersSnap.forEach(d => {
-          ordersList.push({ id: d.id, ...d.data() } as DbOrder);
-        });
-        setOrders(ordersList);
+    setLoading(true);
+    
+    // Subscribe to Orders
+    const unsubscribeOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const list: DbOrder[] = [];
+      snapshot.forEach(d => list.push({ id: d.id, ...d.data() } as DbOrder));
+      setOrders(list);
+    }, (err) => {
+      console.warn("Orders live watch subscription error:", err);
+    });
 
-        // Fetch Users
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const usersList: DbUser[] = [];
-        usersSnap.forEach(d => {
-          usersList.push({ uid: d.id, ...d.data() } as DbUser);
-        });
-        setUsers(usersList);
+    // Subscribe to Users
+    const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const list: DbUser[] = [];
+      snapshot.forEach(d => list.push({ uid: d.id, ...d.data() } as DbUser));
+      setUsers(list);
+    }, (err) => {
+      console.warn("Users live watch subscription error:", err);
+    });
 
-        // Fetch Contacts
-        const contactsSnap = await getDocs(collection(db, 'contacts'));
-        const contactsList: DbContact[] = [];
-        contactsSnap.forEach(d => {
-          contactsList.push({ id: d.id, ...d.data() } as DbContact);
-        });
-        setContacts(contactsList);
-      } catch (err) {
-        console.error('Error loading admin statistics:', err);
-      } finally {
-        setLoading(false);
-      }
+    // Subscribe to Contacts
+    const unsubscribeContacts = onSnapshot(collection(db, 'contacts'), (snapshot) => {
+      const list: DbContact[] = [];
+      snapshot.forEach(d => list.push({ id: d.id, ...d.data() } as DbContact));
+      setContacts(list);
+      setLoading(false);
+    }, (err) => {
+      console.error('Error loading admin contacts live data:', err);
+      // Fallback
+      getDocs(collection(db, 'contacts')).then((snap) => {
+        const list: DbContact[] = [];
+        snap.forEach(d => list.push({ id: d.id, ...d.data() } as DbContact));
+        setContacts(list);
+      }).finally(() => setLoading(false));
+    });
+
+    return () => {
+      unsubscribeOrders();
+      unsubscribeUsers();
+      unsubscribeContacts();
     };
-    loadOverviewData();
   }, []);
 
   // Compute live statistics
@@ -1557,7 +1565,27 @@ function UsersManager() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    setLoading(true);
+    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const list: DbUser[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ uid: docSnap.id, ...docSnap.data() } as DbUser);
+      });
+      setUsers(list);
+      setLoading(false);
+    }, (err) => {
+      console.error('Error watching live users collection:', err);
+      // Fallback
+      getDocs(collection(db, 'users')).then((snap) => {
+        const list: DbUser[] = [];
+        snap.forEach((docSnap) => {
+          list.push({ uid: docSnap.id, ...docSnap.data() } as DbUser);
+        });
+        setUsers(list);
+      }).finally(() => setLoading(false));
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleSeedUsersAndOrders = async () => {

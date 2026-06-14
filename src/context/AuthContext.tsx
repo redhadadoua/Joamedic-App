@@ -76,16 +76,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserProfile(data);
         localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(data));
       } else {
+        const pendingDisplayName = sessionStorage.getItem('pending_signup_displayName');
+        const pendingPhoneNumber = sessionStorage.getItem('pending_signup_phoneNumber');
+        
         const newProfile: UserProfile = {
           uid: currentUser.uid,
           email: currentUser.email,
-          displayName: currentUser.displayName || 'Medic Member',
-          photoURL: currentUser.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(currentUser.displayName || 'Medic')}`,
-          phoneNumber: '',
+          displayName: pendingDisplayName || currentUser.displayName || 'Medic Member',
+          photoURL: currentUser.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(pendingDisplayName || currentUser.displayName || 'Medic')}`,
+          phoneNumber: pendingPhoneNumber || '',
           phoneVerified: false,
           createdAt: new Date().toISOString(),
           role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
         };
+
+        if (pendingDisplayName) {
+          sessionStorage.removeItem('pending_signup_displayName');
+        }
+        if (pendingPhoneNumber) {
+          sessionStorage.removeItem('pending_signup_phoneNumber');
+        }
+
         try {
           await setDoc(docRef, newProfile);
         } catch (dbErr) {
@@ -124,6 +135,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signUp = async (email: string, password: string, displayName: string, phoneNumber: string) => {
+    sessionStorage.setItem('pending_signup_displayName', displayName);
+    sessionStorage.setItem('pending_signup_phoneNumber', phoneNumber);
+
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const currentUser = userCredential.user;
     
