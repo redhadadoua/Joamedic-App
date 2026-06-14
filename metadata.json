@@ -1,0 +1,6 @@
+{
+  "name": "Joamedic",
+  "description": "Premium medical apparel brand landing page featuring a Liquid Glass modern design.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
