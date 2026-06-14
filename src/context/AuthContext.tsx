@@ -90,6 +90,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
         };
 
+        // Delay briefly for auth token propagation
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        let saved = false;
+        let attempts = 0;
+        while (!saved && attempts < 3) {
+          try {
+            await setDoc(docRef, newProfile);
+            saved = true;
+          } catch (dbErr) {
+            attempts++;
+            console.error(`fetchUserProfile retry ${attempts} failed to initialize user document:`, dbErr);
+            if (attempts >= 3) break;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+
         if (pendingDisplayName) {
           sessionStorage.removeItem('pending_signup_displayName');
         }
@@ -97,11 +114,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sessionStorage.removeItem('pending_signup_phoneNumber');
         }
 
-        try {
-          await setDoc(docRef, newProfile);
-        } catch (dbErr) {
-          console.error("Firestore user profile initialization error during login:", dbErr);
-        }
         setUserProfile(newProfile);
         localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(newProfile));
       }
@@ -126,9 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        if (!signUpInProgressRef.current) {
-          await fetchUserProfile(currentUser);
-        }
+        await fetchUserProfile(currentUser);
       } else {
         setUserProfile(null);
       }
@@ -164,7 +174,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
       };
 
-      await setDoc(doc(db, 'users', currentUser.uid), profileData);
+      // Propagation delay for security rules logic sync
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      let written = false;
+      let attempts = 0;
+      while (!written && attempts < 3) {
+        try {
+          await setDoc(doc(db, 'users', currentUser.uid), profileData);
+          written = true;
+        } catch (dbErr) {
+          attempts++;
+          console.error(`signUp write attempt ${attempts} failed:`, dbErr);
+          if (attempts >= 3) {
+            console.warn("Falling back to fetchUserProfile for storage sync.");
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
       
       localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(profileData));
       setUserProfile(profileData);

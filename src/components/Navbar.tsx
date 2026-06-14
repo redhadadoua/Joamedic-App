@@ -139,13 +139,7 @@ export default function Navbar({ onOpenProfile }: { onOpenProfile?: () => void }
             </AnimatePresence>
           </div>
 
-          <button 
-            onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-panel text-xs font-medium text-white/80 hover:text-white transition-colors"
-          >
-            <Globe size={14} />
-            <span>{language}</span>
-          </button>
+
 
           <button 
             className="p-1 text-white/80 hover:text-white transition-colors relative" 
@@ -202,120 +196,117 @@ export default function Navbar({ onOpenProfile }: { onOpenProfile?: () => void }
       </div>
 
       {/* Mobile Nav */}
-      {isOpen && (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="md:hidden mt-4 glass-panel rounded-2xl p-6 flex flex-col gap-4 mx-auto max-w-7xl relative"
-        >
-          <div className="relative mb-2">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none z-10">
-              <Search size={16} />
-            </div>
-            <input 
-              type="text" 
-              placeholder={t('nav.search') || 'Search...'} 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-full py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-teal-400/50 focus:bg-white/10 transition-all w-full"
-            />
-            {searchQuery && (
-              <div className="mt-2 flex flex-col gap-2 max-h-60 overflow-y-auto bg-black/20 rounded-xl p-2 border border-white/5">
-                 {searchResults.length > 0 ? (
-                    searchResults.map(product => (
-                      <div key={product.id} className="flex gap-3 p-2 hover:bg-white/5 rounded-lg transition-colors cursor-pointer items-center">
-                        <img src={product.image} alt={product.name} className="w-10 h-10 object-cover rounded-md opacity-80" />
-                        <div className="flex-1 flex flex-col justify-center">
-                          <h4 className="text-xs font-medium text-white">{product.name}</h4>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className="md:hidden mt-4 glass-panel rounded-2xl p-6 flex flex-col gap-4 mx-auto max-w-7xl relative"
+          >
+            <div className="relative mb-2">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none z-10">
+                <Search size={16} />
+              </div>
+              <input 
+                type="text" 
+                placeholder={t('nav.search') || 'Search...'} 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-white/5 border border-white/10 rounded-full py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-teal-400/50 focus:bg-white/10 transition-all w-full"
+              />
+              {searchQuery && (
+                <div className="mt-2 flex flex-col gap-2 max-h-60 overflow-y-auto bg-black/20 rounded-xl p-2 border border-white/5">
+                   {searchResults.length > 0 ? (
+                      searchResults.map(product => (
+                        <div key={product.id} className="flex gap-3 p-2 hover:bg-white/5 rounded-lg transition-colors cursor-pointer items-center">
+                          <img src={product.image} alt={product.name} className="w-10 h-10 object-cover rounded-md opacity-80" />
+                          <div className="flex-1 flex flex-col justify-center">
+                            <h4 className="text-xs font-medium text-white">{product.name}</h4>
+                          </div>
+                          <button 
+                            className="w-7 h-7 rounded-full bg-teal-500/20 text-teal-300 flex items-center justify-center hover:bg-teal-500/40"
+                            onClick={() => {
+                              addToCart(product);
+                              setSearchQuery('');
+                              setIsOpen(false);
+                            }}
+                          >
+                            <ShoppingCart size={12} />
+                          </button>
                         </div>
-                        <button 
-                          className="w-7 h-7 rounded-full bg-teal-500/20 text-teal-300 flex items-center justify-center hover:bg-teal-500/40"
-                          onClick={() => {
-                            addToCart(product);
-                            setSearchQuery('');
-                            setIsOpen(false);
-                          }}
-                        >
-                          <ShoppingCart size={12} />
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-4 text-center text-white/50 text-xs">
-                      No products found matching "{searchQuery}"
-                    </div>
-                  )}
-              </div>
-            )}
-          </div>
-
-          {!searchQuery && navItems.map((item) => (
-            <a 
-              key={item.href} 
-              href={item.href}
-              className="text-white/80 hover:text-white text-lg font-medium py-2 border-b border-white/10 cursor-pointer"
-              onClick={(e) => {
-                e.preventDefault();
-                setIsOpen(false);
-                if (item.href === '#collections') {
-                  window.dispatchEvent(new CustomEvent('filter-category', { detail: 'All' }));
-                } else {
-                  document.querySelector(item.href)?.scrollIntoView({ behavior: 'smooth' });
-                }
-              }}
-            >
-              {t(item.key)}
-            </a>
-          ))}
-          {!searchQuery && (
-            <>
-              <div className="flex items-center justify-between pt-4">
-                <button 
-                  onClick={toggleLanguage}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-panel text-sm font-medium text-white/80 hover:text-white transition-colors"
-                >
-                  <Globe size={16} />
-                  <span>{language}</span>
-                </button>
-                <div className="flex items-center gap-4">
-                  <button 
-                    onClick={() => { onOpenProfile?.(); setIsOpen(false); }}
-                    className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
-                  >
-                    {user && userProfile?.photoURL ? (
-                      <img 
-                        src={userProfile.photoURL} 
-                        alt="Profile" 
-                        referrerPolicy="no-referrer"
-                        className="w-5 h-5 rounded-full object-cover border border-teal-400/50"
-                      />
+                      ))
                     ) : (
-                      <User size={20} />
+                      <div className="p-4 text-center text-white/50 text-xs">
+                        No products found matching "{searchQuery}"
+                      </div>
                     )}
-                    <span>{user ? (userProfile?.displayName || 'Profile') : 'Sign In'}</span>
-                  </button>
-                  <button 
-                    onClick={() => { setIsCartOpen(true); setIsOpen(false); }}
-                    className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
-                  >
-                    <ShoppingCart size={20} />
-                    <span>Cart ({cartCount})</span>
-                  </button>
                 </div>
-              </div>
-              <button 
-                onClick={() => {
+              )}
+            </div>
+
+            {!searchQuery && navItems.map((item) => (
+              <a 
+                key={item.href} 
+                href={item.href}
+                className="text-white/80 hover:text-white text-lg font-medium py-2 border-b border-white/10 cursor-pointer animate-none"
+                onClick={(e) => {
+                  e.preventDefault();
                   setIsOpen(false);
-                  window.dispatchEvent(new CustomEvent('filter-category', { detail: 'All' }));
+                  if (item.href === '#collections') {
+                    window.dispatchEvent(new CustomEvent('filter-category', { detail: 'All' }));
+                  } else {
+                    document.querySelector(item.href)?.scrollIntoView({ behavior: 'smooth' });
+                  }
                 }}
-                className="glass-button shine-effect px-6 py-3 text-sm text-white mt-2 w-full cursor-pointer"
               >
-                {t('nav.shop')}
-              </button>
-            </>
-          )}
-        </motion.div>
-      )}
+                {t(item.key)}
+              </a>
+            ))}
+            {!searchQuery && (
+              <>
+                <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                  <div className="flex items-center gap-6 justify-center w-full">
+                    <button 
+                      onClick={() => { onOpenProfile?.(); setIsOpen(false); }}
+                      className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
+                    >
+                      {user && userProfile?.photoURL ? (
+                        <img 
+                          src={userProfile.photoURL} 
+                          alt="Profile" 
+                          referrerPolicy="no-referrer"
+                          className="w-5 h-5 rounded-full object-cover border border-teal-400/50"
+                        />
+                      ) : (
+                        <User size={20} />
+                      )}
+                      <span>{user ? (userProfile?.displayName || 'Profile') : 'Sign In'}</span>
+                    </button>
+                    <button 
+                      onClick={() => { setIsCartOpen(true); setIsOpen(false); }}
+                      className="flex items-center gap-2 text-white/80 hover:text-white transition-colors"
+                    >
+                      <ShoppingCart size={20} />
+                      <span>Cart ({cartCount})</span>
+                    </button>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    setIsOpen(false);
+                    window.dispatchEvent(new CustomEvent('filter-category', { detail: 'All' }));
+                  }}
+                  className="glass-button shine-effect px-6 py-3 text-sm text-white mt-2 w-full cursor-pointer"
+                >
+                  {t('nav.shop')}
+                </button>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.header>
   );
 }

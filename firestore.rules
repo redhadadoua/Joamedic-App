@@ -18,11 +18,7 @@ service cloud.firestore {
     function existing() { return resource.data; }
     function isSignedIn() { return request.auth != null; }
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'redhadadoua@gmail.com' || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-      );
+      return isSignedIn() && request.auth.token.email == 'redhadadoua@gmail.com';
     }
 
     function isValidUser(data) {
@@ -30,9 +26,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, list: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow create, update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
-      allow delete: if isAdmin();
+      allow read: if isSignedIn() && (request.auth.uid == userId || request.auth.token.email == 'redhadadoua@gmail.com');
+      allow list: if isSignedIn() && (request.auth.token.email == 'redhadadoua@gmail.com');
+      allow create, update: if isSignedIn() && (request.auth.uid == userId || request.auth.token.email == 'redhadadoua@gmail.com');
+      allow delete: if isSignedIn() && (request.auth.token.email == 'redhadadoua@gmail.com');
     }
 
     function isValidProduct(data) {
