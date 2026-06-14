@@ -23,6 +23,7 @@ import ProfileModal from './components/ProfileModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProductsProvider } from './context/ProductsContext';
 import AdminDashboard from './components/AdminDashboard';
+import AiAssistant from './components/AiAssistant';
 
 function AppContent() {
   const { isAdmin } = useAuth();
@@ -95,6 +96,7 @@ function AppContent() {
 
       <Footer onOpenOrderStatus={() => setIsOrderStatusOpen(true)} theme={theme} setTheme={setTheme} />
       <BackToTop />
+      <AiAssistant />
     </div>
   );
 }
