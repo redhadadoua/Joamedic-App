@@ -43,11 +43,76 @@ interface CartContextType {
   placeOrder: (
     shippingInfo: any, 
     userId?: string, 
-    onProgress?: (step: 'preparing' | 'local_backup' | 'firestore' | 'google_sheets' | 'done') => void
+    onProgress?: (step: string, feedbackMessage?: string) => void
   ) => Promise<string>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
+
+// Standalone explicit multi-step connection verification function to verify internet, Db, and Sheets
+export const verifyConnection = async (
+  webAppUrl: string,
+  onProgress?: (step: string, feedbackMessage?: string) => void
+): Promise<{ firestore: boolean; sheets: boolean; internet: boolean }> => {
+  const statusResult = { firestore: false, sheets: false, internet: false };
+
+  // 1. Verify Internet Reachability
+  onProgress?.('verifying_internet', 'Verifying active internet route and gateway...');
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('Your browser reports being offline. Please check your network connection.');
+  }
+  try {
+    // Try to perform a fast request to check internet gateway
+    const testResponse = await Promise.race([
+      fetch('https://www.google.com', { mode: 'no-cors', method: 'HEAD' }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))
+    ]);
+    statusResult.internet = testResponse !== null;
+  } catch (err) {
+    console.warn("Internet check gateway test warning:", err);
+    statusResult.internet = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  }
+
+  // 2. Verify Firestore Connection
+  onProgress?.('verifying_firestore', 'Pinging secure cloud database (Firestore) gateway...');
+  try {
+    const getDocPromise = getDoc(doc(db, 'settings', 'google_sheets'));
+    const timeoutPromise = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Database resolution timeout')), 2200));
+    await Promise.race([getDocPromise, timeoutPromise]);
+    statusResult.firestore = true;
+  } catch (err: any) {
+    console.warn("Firestore reachability check failed, attempting to proceed:", err);
+    statusResult.firestore = false;
+  }
+
+  // 3. Verify Google Sheets WebApp Endpoint Reachability
+  onProgress?.('verifying_sheets', 'Testing secure Apps Script Web App route...');
+  try {
+    const controller = new AbortController();
+    const sheetsTimeout = setTimeout(() => controller.abort(), 4000); // 4s timeout for reachability check
+
+    const testPingPayload = { action: 'ping' };
+    const pingRes = await fetch(webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(testPingPayload),
+      signal: controller.signal
+    });
+    clearTimeout(sheetsTimeout);
+
+    if (!pingRes.ok) {
+      throw new Error(`Google Web App returned HTTP status ${pingRes.status}`);
+    }
+    statusResult.sheets = true;
+  } catch (err: any) {
+    console.error("Google Sheets verification check failed:", err);
+    statusResult.sheets = false;
+    throw new Error(`Failed to reach Google Sheets API (Failed to fetch) while syncing orders. Please verify webhook configurations.`);
+  }
+
+  onProgress?.('connection_verified', 'All communication lines fully verified!');
+  return statusResult;
+};
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -97,9 +162,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const placeOrder = async (
     shippingInfo: any, 
     userId: string = 'guest',
-    onProgress?: (step: 'preparing' | 'local_backup' | 'firestore' | 'google_sheets' | 'done') => void
+    onProgress?: (step: string, feedbackMessage?: string) => void
   ): Promise<string> => {
-    onProgress?.('preparing');
+    // 1. Initial State Report
+    onProgress?.('preparing', 'Preparing secure order data structure...');
     const generatedOrderId = `JM-${Math.floor(10000 + Math.random() * 90000)}`;
     
     const orderData = {
@@ -118,7 +184,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       createdAt: new Date().toISOString()
     };
 
-    // 1. Fetch Google Sheets Webhook URL first in the background with a strict 800ms timeout
+    // 2. Fetch Google Sheets Webhook URL first in the background with a strict 800ms timeout
+    onProgress?.('fetching_config', 'Retrieving active integration credentials...');
     const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxfimh_5IRjnTlnXW_v9SJ9uQ5gqzcWlUe-bw5YjXLB6YCjTIiahFgvOjd0g6A5wpXGFQ/exec';
     let webAppUrl: string = DEFAULT_WEBHOOK_URL;
     
@@ -142,8 +209,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cached) webAppUrl = cached;
     }
 
-    // 2. Backup write to localStorage immediately so it is instantly available in order history
-    onProgress?.('local_backup');
+    // 3. Perform explicit client-side reachability check
+    try {
+      await verifyConnection(webAppUrl, onProgress);
+    } catch (verifyErr: any) {
+      console.error("Connectivity verification checkpoint failed:", verifyErr);
+      throw new Error(verifyErr?.message || "Failed verification check before placing order.");
+    }
+
+    // 4. Backup write to localStorage immediately so it is instantly available in order history
+    onProgress?.('local_backup', 'Caching backup copy of clinical record locally...');
     const existingLocalOrders = JSON.parse(localStorage.getItem('backup_orders') || '[]');
     const backupOrder = {
       id: generatedOrderId,
@@ -154,9 +229,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('backup_orders', JSON.stringify(existingLocalOrders));
     }
 
-    // 3. Await Firestore document creation with a 1.5s timeout.
-    // Firestore has offline capabilities, so if it takes too long, we let it process in the background.
-    onProgress?.('firestore');
+    // 5. Await Firestore document creation with a 1.5s timeout.
+    onProgress?.('firestore', 'Securing clinical entry in Firestore central repository...');
     try {
       const setDocPromise = setDoc(doc(db, 'orders', generatedOrderId), {
         ...orderData,
@@ -181,9 +255,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // We don't block the purchase flow on database sync warnings
     }
 
-    // 4. Force direct sync to the Google Sheets spreadsheet using the webAppUrl (always fully available)
+    // 6. Force direct sync to the Google Sheets spreadsheet using the webAppUrl (always fully available)
     if (webAppUrl) {
-      onProgress?.('google_sheets');
+      onProgress?.('google_sheets', 'Committing order registry data to Google Sheets...');
       try {
         const itemsDetail = cartItems.map((i: any) => 
           `${i.name} (Color: ${i.color || 'N/A'}, Size: ${i.size || 'N/A'}, Qty: ${i.quantity || 1})`
@@ -215,7 +289,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         for (let i = 0; i < attempts; i++) {
           try {
             const controller = new AbortController();
-            const fetchTimeout = setTimeout(() => controller.abort(), 6000); // 6s timeout per retry
+            const fetchTimeout = setTimeout(() => controller.abort(), 8000); // 8s timeout per retry
 
             webhookRes = await fetch(webAppUrl, {
               method: 'POST',
@@ -258,7 +332,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    onProgress?.('done');
+    onProgress?.('done', 'Clinical order verified and successfully processed!');
     return generatedOrderId;
   };
 

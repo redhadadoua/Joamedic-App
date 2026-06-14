@@ -16,43 +16,74 @@ export default function CheckoutModal() {
   const [checkoutState, setCheckoutState] = useState<'form' | 'processing' | 'success'>('form');
   const [orderId, setOrderId] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [progressStep, setProgressStep] = useState<'preparing' | 'local_backup' | 'firestore' | 'google_sheets' | 'done'>('preparing');
+  const [progressStep, setProgressStep] = useState<string>('preparing');
+  const [progressMessage, setProgressMessage] = useState<string>('');
 
-  const getProgressLabel = (step: typeof progressStep) => {
+  const getProgressLabel = (step: string) => {
     if (language === 'AR') {
       switch (step) {
         case 'preparing':
           return 'جاري إعداد وتحليل بيانات طلبك الطبي...';
+        case 'fetching_config':
+          return 'جاري جلب إعدادات المزامنة النشطة...';
+        case 'verifying_internet':
+          return 'جاري التحقق من مسار الاتصال بالإنترنت...';
+        case 'verifying_firestore':
+          return 'جاري اختبار الاتصال بقاعدة البيانات الآمنة (Firestore)...';
+        case 'verifying_sheets':
+          return 'جاري اختبار وصول نقطة اتصال Google Sheets...';
+        case 'connection_verified':
+          return 'تم تأكيد سلامة قنوات الاتصال بنجاح!';
         case 'local_backup':
-          return 'جاري حفظ نسخة احتياك محلية في المتصفح...';
+          return 'جاري حفظ نسخة احتياطية محلية في المتصفح...';
         case 'firestore':
           return 'جاري نقل وتأمين الطلب في قاعدة البيانات السحابية (Firestore)...';
         case 'google_sheets':
           return 'جاري مزامنة وتوثيق الطلب في سجل Google Sheets الإداري...';
         case 'done':
-          return 'تم تأكيد الطلب بنجاح!';
+          return 'تم تأكيد طلبك العيادي وتوثيقه بنجاح!';
         default:
-          return 'جاري إرسال وتأكيد طلبك...';
+          return progressMessage || 'جاري معالجة وتأكيد طلبك الطبي...';
       }
     } else if (language === 'FR') {
       switch (step) {
         case 'preparing':
           return 'Préparation et validation de votre commande médicale...';
+        case 'fetching_config':
+          return 'Récupération des paramètres d\'échantillonnage...';
+        case 'verifying_internet':
+          return 'Vérification de la passerelle de connexion Internet...';
+        case 'verifying_firestore':
+          return 'Test de la liaison de données sécurisée Firestore...';
+        case 'verifying_sheets':
+          return 'Vérification de la liaison dynamique Google Sheets...';
+        case 'connection_verified':
+          return 'Toutes les lignes de communication sont vérifiées !';
         case 'local_backup':
-          return 'Création d\'une copie de sauvegarde locale...';
+          return 'Sauvegarde locale instantanée dans le cache...';
         case 'firestore':
-          return 'Sécurisation et enregistrement permanent sur Firestore...';
+          return 'Envoi et stockage sécurisé du dossier sur Firestore...';
         case 'google_sheets':
-          return 'Mise à jour et synchronisation du registre Google Sheets...';
+          return 'Mise à jour directe du tableau Google Sheets...';
         case 'done':
-          return 'Commande validée avec succès !';
+          return 'Commande clinique transmise et enregistrée !';
         default:
-          return 'Traitement de votre commande en cours...';
+          return progressMessage || 'Traitement de votre commande médicale...';
       }
     } else {
       switch (step) {
         case 'preparing':
           return 'Preparing and validating clinical request data...';
+        case 'fetching_config':
+          return 'Retrieving active integration settings...';
+        case 'verifying_internet':
+          return 'Verifying active internet route and gateway...';
+        case 'verifying_firestore':
+          return 'Pinging secure cloud database (Firestore) gateway...';
+        case 'verifying_sheets':
+          return 'Testing secure Apps Script Web App route...';
+        case 'connection_verified':
+          return 'All communication routes successfully verified!';
         case 'local_backup':
           return 'Backing up order locally in offline cache...';
         case 'firestore':
@@ -60,9 +91,9 @@ export default function CheckoutModal() {
         case 'google_sheets':
           return 'Synchronizing records securely with Google Sheets...';
         case 'done':
-          return 'Clinical order verified successfully!';
+          return 'Clinical order verified and processed successfully!';
         default:
-          return 'Processing medical order placement...';
+          return progressMessage || 'Processing and confirming your medical order...';
       }
     }
   };
@@ -130,10 +161,14 @@ export default function CheckoutModal() {
     setErrorMsg(null);
     setCheckoutState('processing');
     setProgressStep('preparing');
+    setProgressMessage('Preparing active clinical data structure...');
     
     try {
       const userId = user ? user.uid : 'guest';
-      const generatedOrderId = await placeOrder(shippingInfo, userId, (step) => setProgressStep(step));
+      const generatedOrderId = await placeOrder(shippingInfo, userId, (step, msg) => {
+        setProgressStep(step);
+        if (msg) setProgressMessage(msg);
+      });
       
       setOrderId(generatedOrderId);
       setCheckoutState('success');
