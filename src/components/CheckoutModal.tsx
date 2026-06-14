@@ -89,7 +89,7 @@ export default function CheckoutModal() {
           name: item.name, 
           quantity: item.quantity, 
           price: item.price, 
-          size: item.size,
+          size: item.size || null,
           personalization: item.personalization || null
         })),
         total: cartTotal,
@@ -101,8 +101,11 @@ export default function CheckoutModal() {
       // Fetch Google Sheets Webhook URL first in the background
       let webAppUrl: string | null = null;
       try {
-        const sheetsDoc = await getDoc(doc(db, 'settings', 'google_sheets'));
-        if (sheetsDoc.exists()) {
+        const sheetsDocPromise = getDoc(doc(db, 'settings', 'google_sheets'));
+        const timeoutPromise = new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+        const sheetsDoc = await Promise.race([sheetsDocPromise, timeoutPromise]);
+        
+        if (sheetsDoc && sheetsDoc.exists && sheetsDoc.exists()) {
           const sheetsData = sheetsDoc.data();
           webAppUrl = sheetsData.webAppUrl || null;
         }
@@ -123,10 +126,22 @@ export default function CheckoutModal() {
 
       // Await Firestore document creation to guarantee security & absolute persistence on the server
       try {
-        await setDoc(doc(db, 'orders', generatedOrderId), {
+        const setDocPromise = setDoc(doc(db, 'orders', generatedOrderId), {
           ...orderData,
+          items: cartItems.map(item => ({ 
+            id: item.id, 
+            name: item.name, 
+            quantity: item.quantity, 
+            price: item.price, 
+            size: item.size || null,
+            personalization: item.personalization || null
+          })),
           createdAt: serverTimestamp() // Genuine Firestore serverTimestamp for db integrity
         });
+        
+        // Wait at most 4 seconds. If offline, the promise won't resolve, but we can treat it as success locally.
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('timeout'), 4000));
+        await Promise.race([setDocPromise, timeoutPromise]);
       } catch (firestoreErr: any) {
         console.error("Firestore order placement error:", firestoreErr);
         setErrorMsg(
