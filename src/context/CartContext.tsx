@@ -209,13 +209,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (cached) webAppUrl = cached;
     }
 
-    // 3. Perform explicit client-side reachability check
-    try {
-      await verifyConnection(webAppUrl, onProgress);
-    } catch (verifyErr: any) {
-      console.error("Connectivity verification checkpoint failed:", verifyErr);
-      throw new Error(verifyErr?.message || "Failed verification check before placing order.");
-    }
+    // 3. Skip blocking client-side reachability pings for zero-latency checkout
+    // We bypass verifyConnection here to make order completion ultra-fast.
+    // However, we run it in the background to log reachability diagnostics for debugging.
+    verifyConnection(webAppUrl).catch(err => {
+      console.log('Background server reachability diagnostic ping completed:', err?.message || err);
+    });
 
     // 4. Backup write to localStorage immediately so it is instantly available in order history
     onProgress?.('local_backup', 'Caching backup copy of clinical record locally...');
@@ -229,7 +228,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('backup_orders', JSON.stringify(existingLocalOrders));
     }
 
-    // 5. Await Firestore document creation with a 1.5s timeout.
+    // 5. Fire Firestore document creation with a super-fast 200ms local-cache race threshold.
+    // Firestore has robust offline persistence: once setDoc is fired, it writes to the local cache database 
+    // instantly and continues cloud synchronization in the background. We don't block the purchase flow on it.
     onProgress?.('firestore', 'Securing clinical entry in Firestore central repository...');
     try {
       const setDocPromise = setDoc(doc(db, 'orders', generatedOrderId), {
@@ -245,90 +246,91 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: serverTimestamp() // Genuine Firestore serverTimestamp for db integrity
       });
       
-      const timeoutPromise = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 1500));
-      const raceRes = await Promise.race([setDocPromise, timeoutPromise]);
-      if (raceRes === 'timeout') {
-        console.warn("Firestore order took more than 1.5 seconds. Proceeding to Google Sheets sync in parallel.");
-      }
+      // Give Firestore up to 250ms to finish local cache write, otherwise let it sync in background
+      await Promise.race([
+        setDocPromise, 
+        new Promise((resolve) => setTimeout(resolve, 250))
+      ]);
     } catch (firestoreErr: any) {
       console.warn("Firestore non-blocking write warning, proceeding to sheets synchronization:", firestoreErr);
-      // We don't block the purchase flow on database sync warnings
     }
 
     // 6. Force direct sync to the Google Sheets spreadsheet using the webAppUrl (always fully available)
     if (webAppUrl) {
       onProgress?.('google_sheets', 'Committing order registry data to Google Sheets...');
-      try {
-        const itemsDetail = cartItems.map((i: any) => 
-          `${i.name} (Color: ${i.color || 'N/A'}, Size: ${i.size || 'N/A'}, Qty: ${i.quantity || 1})`
-        ).join('; ');
+      
+      const itemsDetail = cartItems.map((i: any) => 
+        `${i.name} (Color: ${i.color || 'N/A'}, Size: ${i.size || 'N/A'}, Qty: ${i.quantity || 1})`
+      ).join('; ');
 
-        const addressParts = [];
-        if (shippingInfo.address) addressParts.push(shippingInfo.address);
-        if (shippingInfo.city) addressParts.push(shippingInfo.city);
-        if (shippingInfo.wilaya) addressParts.push(shippingInfo.wilaya);
-        const finalAddress = addressParts.join(', ');
+      const addressParts = [];
+      if (shippingInfo.address) addressParts.push(shippingInfo.address);
+      if (shippingInfo.city) addressParts.push(shippingInfo.city);
+      if (shippingInfo.wilaya) addressParts.push(shippingInfo.wilaya);
+      const finalAddress = addressParts.join(', ');
 
-        const newOrderRow = [
-          generatedOrderId,
-          shippingInfo.name || 'Guest Customer',
-          shippingInfo.email || 'N/A',
-          shippingInfo.phone || 'N/A',
-          finalAddress,
-          `${cartTotal} DA`,
-          new Date().toLocaleString(),
-          'processing',
-          itemsDetail
-        ];
+      const newOrderRow = [
+        generatedOrderId,
+        shippingInfo.name || 'Guest Customer',
+        shippingInfo.email || 'N/A',
+        shippingInfo.phone || 'N/A',
+        finalAddress,
+        `${cartTotal} DA`,
+        new Date().toLocaleString(),
+        'processing',
+        itemsDetail
+      ];
 
-        let webhookRes;
-        let attempts = 3;
-        let success = false;
-        let finalErr = null;
+      // Try syncing immediately with detailed logging and retry mechanics
+      let attempts = 3;
+      let success = false;
+      let finalErr = null;
 
-        for (let i = 0; i < attempts; i++) {
+      for (let i = 0; i < attempts; i++) {
+        try {
+          const controller = new AbortController();
+          const fetchTimeout = setTimeout(() => controller.abort(), 6000); // 6s timeout per retry
+
+          const response = await fetch(webAppUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action: 'add_order', data: [newOrderRow] }),
+            signal: controller.signal
+          });
+          clearTimeout(fetchTimeout);
+
+          if (!response.ok) {
+            throw new Error(`Google Web App returned status ${response.status}`);
+          }
+
+          const text = await response.text();
           try {
-            const controller = new AbortController();
-            const fetchTimeout = setTimeout(() => controller.abort(), 8000); // 8s timeout per retry
-
-            webhookRes = await fetch(webAppUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain' },
-              body: JSON.stringify({ action: 'add_order', data: [newOrderRow] }),
-              signal: controller.signal
-            });
-            clearTimeout(fetchTimeout);
-
-            if (!webhookRes.ok) {
-              throw new Error(`Google Web App returned status ${webhookRes.status}`);
+            const parsed = JSON.parse(text);
+            if (parsed && parsed.success === false) {
+              throw new Error(parsed.error || "Execution error in Google Apps Script.");
             }
-
-            const text = await webhookRes.text();
-            try {
-              const parsed = JSON.parse(text);
-              if (parsed && parsed.success === false) {
-                throw new Error(parsed.error || "Execution error in Google Apps Script.");
-              }
-            } catch (jsonErr: any) {
-              console.warn("Could not parse Apps Script response as JSON, proceeding:", text);
-            }
-            success = true;
-            break; // sync successful!
-          } catch (err: any) {
-            console.warn(`Google Sheets synchronization attempt ${i + 1} of ${attempts} failed:`, err);
-            finalErr = err;
-            if (i < attempts - 1) {
-              await new Promise(resolve => setTimeout(resolve, 800)); // wait 0.8s before automatic retry
-            }
+          } catch (jsonErr: any) {
+            // Apps scripts sometimes output HTML or non-json success, we consider HTTP 200 ok
+            console.log("Apps Script output parsed as raw text:", text);
+          }
+          success = true;
+          break; // successfully synced
+        } catch (err: any) {
+          console.warn(`[RETRY LOG] Google Sheets synchronization attempt ${i + 1} of ${attempts} failed:`, err?.message || err);
+          finalErr = err;
+          if (i < attempts - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500)); // fast retry delay
           }
         }
+      }
 
-        if (!success) {
-          throw new Error(`Google Sheets integration failed after 3 attempts. ${finalErr?.message || finalErr}`);
-        }
-      } catch (webhookErr: any) {
-        console.error("Sheets webhook preparation/trigger error:", webhookErr);
-        throw new Error(`Google Sheets integration error: ${webhookErr?.message || webhookErr}`);
+      // If the direct sync fails completely, instead of throwing an error and crash-stalling the customer,
+      // save to failed queue in localStorage so it can be re-synced silently next time or from Admin dashboard!
+      if (!success) {
+        console.error("🚨 Google Sheets API synchronization failed after 3 attempts. Storing in local failed queue:", finalErr);
+        const failedQueue = JSON.parse(localStorage.getItem('failed_sheets_sync_queue') || '[]');
+        failedQueue.push({ id: generatedOrderId, row: newOrderRow, createdAt: new Date().toISOString() });
+        localStorage.setItem('failed_sheets_sync_queue', JSON.stringify(failedQueue));
       }
     }
 

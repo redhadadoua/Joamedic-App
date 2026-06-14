@@ -31,7 +31,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useProducts } from '../context/ProductsContext';
 import { Product } from '../context/CartContext';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, query, orderBy, limit, onSnapshot, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import GoogleSheetsManager from './GoogleSheetsManager';
 import {
@@ -1262,10 +1262,55 @@ function ProductsManager() {
   );
 }
 
+// Simple helper to parse CSV rows robustly
+function parseCSVText(csvText: string): string[][] {
+  const lines: string[][] = [];
+  let currentLine: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentField += '"';
+        i++; // skip
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentLine.push(currentField);
+      currentField = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      currentLine.push(currentField);
+      lines.push(currentLine);
+      currentLine = [];
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+  if (currentField || currentLine.length > 0) {
+    currentLine.push(currentField);
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
 function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSearch?: string; onClearInitialSearch?: () => void }) {
   const [orders, setOrders] = useState<DbOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(initialSearch);
+
+  // Advanced direct sheet-sync engine state
+  const [sheetsSyncing, setSheetsSyncing] = useState(false);
+  const [sheetsSyncError, setSheetsSyncError] = useState<string | null>(null);
+  const [sheetsSyncSuccessCount, setSheetsSyncSuccessCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (initialSearch) {
@@ -1279,8 +1324,156 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
   // Manage Order State
   const [managingOrder, setManagingOrder] = useState<DbOrder | null>(null);
 
+  const syncOrdersFromGoogleSheet = async (currentOrders: DbOrder[]) => {
+    try {
+      setSheetsSyncing(true);
+      setSheetsSyncError(null);
+      setSheetsSyncSuccessCount(null);
+
+      let spreadsheetId = '1qbqMGXqA_HPFpYvpjn2XPJNKwnfXQRscrXKkxDMBR8M'; // fallback default
+      try {
+        const configSnap = await getDoc(doc(db, 'settings', 'google_sheets'));
+        if (configSnap.exists()) {
+          const configData = configSnap.data();
+          if (configData.spreadsheetId) {
+            spreadsheetId = configData.spreadsheetId.trim();
+          }
+        }
+      } catch (e) {
+        console.warn("Could not retrieve google sheet id from settings, using fallback standard:", e);
+      }
+
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&sheet=Orders`;
+      const res = await fetch(csvUrl);
+      if (!res.ok) {
+        throw new Error(`Google Sheets export returned status ${res.status}`);
+      }
+
+      const csvText = await res.text();
+      if (!csvText || csvText.includes('html') || csvText.includes('<!DOCTYPE')) {
+        throw new Error("Invalid spreadsheet dataset structure (is Google Sheet set to 'Anyone with link can view'?)");
+      }
+
+      const rows = parseCSVText(csvText);
+      if (rows.length <= 1) return; // Only contains headers
+
+      const existingIds = new Set(currentOrders.map(o => o.id.toUpperCase()));
+      let syncCount = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length < 2) continue;
+
+        const orderId = row[0]?.trim();
+        if (!orderId || !orderId.toUpperCase().startsWith('JM-')) continue;
+
+        if (!existingIds.has(orderId.toUpperCase())) {
+          console.log(`[AUTO SHEET SYNC] Pulling missing order ${orderId} from spreadsheet...`);
+
+          const nameVal = row[1] || 'Guest Customer';
+          const emailVal = row[2] || 'N/A';
+          const phoneVal = row[3] || 'N/A';
+          const addressText = row[4] || 'N/A';
+          const totalStr = row[5] || '0';
+          const orderStatus = row[7]?.toLowerCase()?.trim() || 'processing';
+          const itemsText = row[8] || '';
+
+          const totalVal = parseFloat(totalStr.replace(/[^0-9.]/g, '')) || 0;
+
+          // Split items text
+          const itemsArr: any[] = [];
+          if (itemsText) {
+            const splitItems = itemsText.split(';');
+            splitItems.forEach((part, index) => {
+              const cleanedPart = part.trim();
+              if (cleanedPart) {
+                let name = cleanedPart;
+                let quantity = 1;
+                let size = 'M';
+                let color = 'Default';
+
+                const nameMatch = cleanedPart.match(/^([^(]+)/);
+                if (nameMatch) name = nameMatch[1].trim();
+
+                const qtyMatch = cleanedPart.match(/Qty:\s*(\d+)/i);
+                if (qtyMatch) quantity = parseInt(qtyMatch[1]) || 1;
+
+                const sizeMatch = cleanedPart.match(/Size:\s*([^,)]+)/i);
+                if (sizeMatch) size = sizeMatch[1].trim();
+
+                const colorMatch = cleanedPart.match(/Color:\s*([^,)]+)/i);
+                if (colorMatch) color = colorMatch[1].trim();
+
+                itemsArr.push({
+                  id: 100 + index, 
+                  name: name,
+                  quantity: quantity,
+                  price: `${Math.round(totalVal / (quantity || 1))} DA`,
+                  size: size,
+                  color: color,
+                  personalization: null
+                });
+              }
+            });
+          }
+
+          if (itemsArr.length === 0) {
+            itemsArr.push({
+              id: 999,
+              name: 'Imported Spreadsheet Order',
+              quantity: 1,
+              price: `${totalVal} DA`,
+              size: 'M',
+              personalization: null
+            });
+          }
+
+          const addressSplits = addressText.split(',');
+          const cityVal = addressSplits[1]?.trim() || '';
+          const wilayaVal = addressSplits[2]?.trim() || '';
+
+          const orderPayload = {
+            userId: 'guest',
+            total: totalVal,
+            status: orderStatus,
+            shippingInfo: {
+              name: nameVal,
+              email: emailVal,
+              phone: phoneVal,
+              address: addressText,
+              city: cityVal,
+              wilaya: wilayaVal
+            }
+          };
+
+          await setDoc(doc(db, 'orders', orderId), {
+            ...orderPayload,
+            items: itemsArr,
+            createdAt: serverTimestamp()
+          });
+
+          syncCount++;
+        }
+      }
+
+      setSheetsSyncSuccessCount(syncCount);
+      setTimeout(() => {
+        setSheetsSyncSuccessCount(null);
+      }, 5000);
+    } catch (err: any) {
+      console.warn("Spreadsheet parsing/automatic sync bypass alert:", err);
+      setSheetsSyncError(err?.message || "Unavailable connection.");
+      setTimeout(() => {
+        setSheetsSyncError(null);
+      }, 5000);
+    } finally {
+      setSheetsSyncing(false);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
+    let isInitialLoad = true;
     const unsubscribe = onSnapshot(collection(db, 'orders'), (snapshot) => {
       const list: DbOrder[] = [];
       snapshot.forEach((docSnap) => {
@@ -1288,13 +1481,19 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
       });
       setOrders(list);
       setLoading(false);
+
+      // Trigger automatic background Google Sheet alignment check on load!
+      if (isInitialLoad && list.length > 0) {
+        isInitialLoad = false;
+        syncOrdersFromGoogleSheet(list);
+      }
     }, (err) => {
       console.error("Error watching live orders list:", err);
-      // Fallback
       getDocs(collection(db, 'orders')).then(snap => {
         const list: DbOrder[] = [];
         snap.forEach(d => list.push({ id: d.id, ...d.data() } as DbOrder));
         setOrders(list);
+        syncOrdersFromGoogleSheet(list);
       }).finally(() => setLoading(false));
     });
 
@@ -1342,26 +1541,50 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
             className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-teal-400/50 transition-colors"
           />
         </div>
-        <button 
-          onClick={async () => {
-            try {
-              setLoading(true);
-              const snap = await getDocs(collection(db, 'orders'));
-              const list: DbOrder[] = [];
-              snap.forEach((docSnap) => {
-                list.push({ id: docSnap.id, ...docSnap.data() } as DbOrder);
-              });
-              setOrders(list);
-            } catch (err) {
-              console.error("Manual refresh of orders failed:", err);
-            } finally {
-              setLoading(false);
-            }
-          }}
-          className="flex items-center gap-2 bg-white/10 border border-white/10 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-white/20 transition-colors shrink-0"
-        >
-          Refresh Orders
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          {sheetsSyncing && (
+            <div className="flex items-center gap-1.5 bg-yellow-400/15 border border-yellow-400/30 text-yellow-300 text-xs px-3 py-1.5 rounded-xl font-mono tracking-wide animate-pulse">
+              <Loader size={12} className="animate-spin" />
+              <span>ALIGNING WITH SHEET...</span>
+            </div>
+          )}
+          {sheetsSyncSuccessCount !== null && (
+            <div className={`text-xs px-3 py-1.5 rounded-xl font-medium flex items-center gap-1 bg-teal-500/10 border border-teal-500/20 text-teal-300 font-mono`}>
+              <span>✓</span>
+              <span>{sheetsSyncSuccessCount > 0 ? `SYNCED +${sheetsSyncSuccessCount} SPLIT RECORDS` : 'SHEETS FULLY UP-TO-DATE'}</span>
+            </div>
+          )}
+          {sheetsSyncError && (
+            <div className="text-xs px-3 py-1.5 rounded-xl font-medium bg-red-500/10 border border-red-500/20 text-red-300 font-mono">
+              <span>⚠ FETCH DISRUPTED: {sheetsSyncError}</span>
+            </div>
+          )}
+          <button 
+            type="button"
+            onClick={async () => {
+              try {
+                setLoading(true);
+                const snap = await getDocs(collection(db, 'orders'));
+                const list: DbOrder[] = [];
+                snap.forEach((docSnap) => {
+                  list.push({ id: docSnap.id, ...docSnap.data() } as DbOrder);
+                });
+                setOrders(list);
+                // Also trigger spreadsheets direct reconciliation sync!
+                await syncOrdersFromGoogleSheet(list);
+              } catch (err) {
+                console.error("Manual refresh of orders failed:", err);
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="flex items-center gap-2 bg-white/10 border border-white/10 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-white/20 hover:border-teal-400/30 transition-all duration-300 cursor-pointer text-white shrink-0 shadow-md hover:shadow-teal-500/5 active:scale-95"
+            disabled={sheetsSyncing}
+          >
+            <FileSpreadsheet size={16} className={`text-teal-400 ${sheetsSyncing ? 'animate-bounce' : ''}`} />
+            <span>Refresh & Sync Sheets</span>
+          </button>
+        </div>
       </div>
 
       {loading ? (

@@ -329,9 +329,7 @@ export default function CheckoutModal() {
                   </div>
                   <div className="text-center space-y-2 max-w-md">
                     <p className="text-teal-300 font-medium animate-pulse text-lg tracking-wide">{t('checkout.processing')}</p>
-                    <p className="text-white/60 text-xs font-mono max-w-xs mx-auto animate-pulse transition-all duration-300">
-                      {getProgressLabel(progressStep)}
-                    </p>
+                    <p className="text-white/40 text-[11px] leading-relaxed">Securing your clinical order in the registry. Please wait...</p>
                   </div>
                 </div>
               )}
