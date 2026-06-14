@@ -113,17 +113,14 @@ export default function ProfileModal({ isOpen, onClose, onOpenAdmin }: { isOpen:
           }
 
           // Step 3: Run fast race to fetch latest orders from Server
-          const timeoutPromise = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Firestore connection timeout')), 1500)
+          const timeoutPromise = new Promise<any>((resolve) => 
+            setTimeout(() => resolve(null), 1500)
           );
 
           const serverSnapshot = await Promise.race([
             getDocs(q),
             timeoutPromise
-          ]).catch(err => {
-            console.warn("Could not reach Firestore backend, using cached and locally backup orders:", err);
-            return null;
-          });
+          ]);
 
           if (serverSnapshot && !serverSnapshot.empty) {
             serverSnapshot.docs.forEach(docSnap => {

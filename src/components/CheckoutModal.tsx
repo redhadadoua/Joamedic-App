@@ -102,7 +102,7 @@ export default function CheckoutModal() {
       let webAppUrl: string | null = null;
       try {
         const sheetsDocPromise = getDoc(doc(db, 'settings', 'google_sheets'));
-        const timeoutPromise = new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+        const timeoutPromise = new Promise<any>((resolve) => setTimeout(() => resolve(null), 3000));
         const sheetsDoc = await Promise.race([sheetsDocPromise, timeoutPromise]);
         
         if (sheetsDoc && sheetsDoc.exists && sheetsDoc.exists()) {

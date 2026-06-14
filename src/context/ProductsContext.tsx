@@ -51,20 +51,18 @@ export const ProductsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       // Step 2: Query database with a fast timeout
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Firestore connection timeout')), 1500)
+      const timeoutPromise = new Promise<any>((resolve) => 
+        setTimeout(() => resolve(null), 1500)
       );
 
       const serverSnapshot = await Promise.race([
         getDocs(collection(db, 'products')),
         timeoutPromise
-      ]).catch((err) => {
-        // If we already loaded cached products, don't throw an error on slow connection
-        if (products.length > 0) {
-          return null;
-        }
-        throw err;
-      });
+      ]);
+      
+      if (!serverSnapshot && products.length === 0) {
+        throw new Error('Firestore connection timeout');
+      }
       
       if (serverSnapshot) {
         if (serverSnapshot.empty) {
