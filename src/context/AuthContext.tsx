@@ -9,7 +9,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 export interface UserProfile {
@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const docRef = doc(db, 'users', currentUser.uid);
-      const docSnap = await getDoc(docRef);
+      const docSnap = await getDocFromServer(docRef).catch(() => getDoc(docRef));
       if (docSnap.exists()) {
         const data = docSnap.data() as UserProfile;
         if (currentUser.email === 'redhadadoua@gmail.com' && data.role !== 'admin') {
