@@ -88,12 +88,27 @@ export default function CheckoutModal() {
       setCheckoutState('success');
     } catch (error: any) {
       console.error("Error creating order: ", error);
+      
+      let debugText = "";
+      if (error && error.message) {
+        try {
+          const parsed = JSON.parse(error.message);
+          if (parsed && parsed.error) {
+            debugText = ` (${parsed.error})`;
+          } else {
+            debugText = ` (${error.message})`;
+          }
+        } catch {
+          debugText = ` (${error.message})`;
+        }
+      }
+
       setErrorMsg(
         language === 'AR' 
-          ? 'عذراً! واجهنا خطأ أثناء معالجة طلبك الطبي. يرجى التحقق من اتصال الشبكة وإعادة المحاولة.' 
+          ? `عذراً! واجهنا خطأ أثناء معالجة طلبك الطبي.${debugText} يرجى التحقق من اتصال الشبكة وإعادة المحاولة.` 
           : language === 'FR'
-          ? 'Désolé ! Une erreur est survenue lors du traitement de votre commande dans la base clinique. Veuillez réessayer.'
-          : 'Oops! We encountered an error while processing your clinical order. Please check your network connection and retry.'
+          ? `Désolé ! Une erreur est survenue lors du traitement de votre commande.${debugText} Veuillez vérifier votre connexion et réessayer.`
+          : `Oops! We encountered an error while processing your clinical order.${debugText} Please check your network connection and retry.`
       );
       setCheckoutState('form');
     }

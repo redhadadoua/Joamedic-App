@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 export type Product = {
@@ -119,6 +119,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (configErr) {
       console.warn("Could not load google sheets configuration:", configErr);
+      handleFirestoreError(configErr, OperationType.GET, 'settings/google_sheets');
     }
 
     // 2. Backup write to localStorage immediately so it is instantly available in order history
@@ -134,7 +135,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 3. Await Firestore document creation to guarantee security & absolute persistence on the server
     try {
-      const setDocPromise = setDoc(doc(db, 'orders', generatedOrderId), {
+      await setDoc(doc(db, 'orders', generatedOrderId), {
         ...orderData,
         items: cartItems.map(item => ({ 
           id: item.id, 
@@ -146,19 +147,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })),
         createdAt: serverTimestamp() // Genuine Firestore serverTimestamp for db integrity
       });
-      
-      // Wait at most 4 seconds. If offline, the promise won't resolve, but we can treat it as success locally.
-      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve('timeout'), 4000));
-      const res = await Promise.race([setDocPromise, timeoutPromise]);
-      if (res === 'timeout') {
-         console.warn("Firestore order took too long to respond. Safe-saving offline.");
-      }
     } catch (firestoreErr: any) {
       console.error("Firestore order placement error:", firestoreErr);
-      throw new Error(firestoreErr?.message || "Firestore insertion failed");
+      handleFirestoreError(firestoreErr, OperationType.WRITE, `orders/${generatedOrderId}`);
     }
 
-    // 4. If a Google Sheets webhook exists, append the order details immediately to Google Sheets
+    // 4. If a Google Sheets webhook exists, append the order details immediately to Google Sheets without silent failures
     if (webAppUrl) {
       try {
         const itemsDetail = cartItems.map((i: any) => 
@@ -184,15 +178,28 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ];
 
         // Trigger append row to Google Sheet using text/plain to avoid CORS problems in production web applications
-        await fetch(webAppUrl, {
+        const webhookRes = await fetch(webAppUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'add_order', data: [newOrderRow] })
-        }).catch(webhookErr => {
-          console.error("Delayed sheets webhook background trigger error:", webhookErr);
         });
-      } catch (webhookErr) {
-        console.error("Sheets webhook preparation error:", webhookErr);
+
+        if (!webhookRes.ok) {
+          throw new Error(`Google Sheets Web App responded with HTTP status ${webhookRes.status}`);
+        }
+
+        const text = await webhookRes.text();
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed && parsed.success === false) {
+            throw new Error(parsed.error || "Google Sheets Apps Script reported execution failure.");
+          }
+        } catch (jsonErr: any) {
+          console.warn("Could not parse Apps Script response as JSON, proceeding:", text);
+        }
+      } catch (webhookErr: any) {
+        console.error("Sheets webhook preparation/trigger error:", webhookErr);
+        throw new Error(`Google Sheets integration failed: ${webhookErr?.message || webhookErr}`);
       }
     }
 
