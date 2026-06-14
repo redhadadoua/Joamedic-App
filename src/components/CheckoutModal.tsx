@@ -6,21 +6,7 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-
-const ALGERIA_WILAYAS = [
-  "1 - Adrar", "2 - Chlef", "3 - Laghouat", "4 - Oum El Bouaghi", "5 - Batna", 
-  "6 - Béjaïa", "7 - Biskra", "8 - Béchar", "9 - Blida", "10 - Bouira", 
-  "11 - Tamanrasset", "12 - Tébessa", "13 - Tlemcen", "14 - Tiaret", "15 - Tizi Ouzou", 
-  "16 - Alger", "17 - Djelfa", "18 - Jijel", "19 - Sétif", "20 - Saïda", 
-  "21 - Skikda", "22 - Sidi Bel Abbès", "23 - Annaba", "24 - Guelma", "25 - Constantine", 
-  "26 - Médéa", "27 - Mostaganem", "28 - M'Sila", "29 - Mascara", "30 - Ouargla", 
-  "31 - Oran", "32 - El Bayadh", "33 - Illizi", "34 - Bordj Bou Arréridj", "35 - Boumerdès", 
-  "36 - El Tarf", "37 - Tindouf", "38 - Tissemsilt", "39 - El Oued", "40 - Khenchela", 
-  "41 - Souk Ahras", "42 - Tipaza", "43 - Mila", "44 - Aïn Defla", "45 - Naâma", 
-  "46 - Aïn Témouchent", "47 - Ghardaïa", "48 - Relizane", "49 - Timimoun", "50 - Bordj Badji Mokhtar", 
-  "51 - Ouled Djellal", "52 - Béni Abbès", "53 - In Salah", "54 - In Guezzam", "55 - Touggourt", 
-  "56 - Djanet", "57 - El M'Ghair", "58 - El Meniaa"
-];
+import { wilayas, getCommunesByWilayaId } from 'algeria-locations';
 
 export default function CheckoutModal() {
   const { t, language } = useLanguage();
@@ -34,6 +20,22 @@ export default function CheckoutModal() {
   const [shippingInfo, setShippingInfo] = useState({
     name: '', email: '', phone: '', wilaya: '', city: '', address: ''
   });
+  const [selectedWilayaId, setSelectedWilayaId] = useState<number | ''>('');
+  const [communes, setCommunes] = useState<{id: number, name: string}[]>([]);
+
+  const handleWilayaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const wilayaId = parseInt(e.target.value, 10);
+    const wilayaObj = wilayas.find((w: any) => w.id === wilayaId);
+    if (!wilayaObj) return;
+
+    setSelectedWilayaId(wilayaId);
+    setCommunes(getCommunesByWilayaId(wilayaId));
+    setShippingInfo({
+      ...shippingInfo, 
+      wilaya: `${wilayaObj.code} - ${wilayaObj.name}`, 
+      city: '' // reset city 
+    });
+  };
 
   const handleClose = () => {
     setIsCheckoutOpen(false);
@@ -274,14 +276,19 @@ export default function CheckoutModal() {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <input required type="text" placeholder={t('checkout.name')} value={shippingInfo.name} onChange={e => setShippingInfo({...shippingInfo, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors" />
-                        <input required type="tel" placeholder={t('checkout.phone')} value={shippingInfo.phone} onChange={e => setShippingInfo({...shippingInfo, phone: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors" />
-                        <select required value={shippingInfo.wilaya} onChange={e => setShippingInfo({...shippingInfo, wilaya: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors appearance-none cursor-pointer">
+                        <input required type="tel" pattern="[0-9]*" onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, ''); }} placeholder={t('checkout.phone')} value={shippingInfo.phone} onChange={e => setShippingInfo({...shippingInfo, phone: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors" />
+                        <select required value={selectedWilayaId} onChange={handleWilayaChange} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors appearance-none cursor-pointer">
                           <option value="" disabled>{t('checkout.wilaya')}</option>
-                          {ALGERIA_WILAYAS.map((wilaya) => (
-                            <option key={wilaya} value={wilaya} className="bg-emerald-950 text-white">{wilaya}</option>
+                          {wilayas.map((w: any) => (
+                            <option key={w.id} value={w.id} className="bg-emerald-950 text-white">{w.code} - {w.name}</option>
                           ))}
                         </select>
-                        <input required type="text" placeholder={t('checkout.city')} value={shippingInfo.city} onChange={e => setShippingInfo({...shippingInfo, city: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors" />
+                        <select required value={shippingInfo.city} onChange={e => setShippingInfo({...shippingInfo, city: e.target.value})} disabled={!selectedWilayaId} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors appearance-none cursor-pointer disabled:opacity-50">
+                          <option value="" disabled>{t('checkout.city')}</option>
+                          {communes.map((c: any) => (
+                            <option key={c.id} value={c.name} className="bg-emerald-950 text-white">{c.name}</option>
+                          ))}
+                        </select>
                         <input required type="text" placeholder={t('checkout.address')} value={shippingInfo.address} onChange={e => setShippingInfo({...shippingInfo, address: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors sm:col-span-2" />
                       </div>
                     </div>

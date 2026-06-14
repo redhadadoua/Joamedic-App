@@ -1,16 +1,101 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingCart, X, CheckCircle2, Ruler } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useCart, Product } from '../context/CartContext';
 import { useProducts } from '../context/ProductsContext';
 import SizeGuideModal from './SizeGuideModal';
 
+const ProductImageZoom = ({ image, name }: { image: string, name: string }) => {
+  const [isZooming, setIsZooming] = useState(false);
+  const [zoomPos, setZoomPos] = useState({ x: '50%', y: '50%' });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+    setZoomPos({ x: `${x}%`, y: `${y}%` });
+  };
+
+  return (
+    <div 
+      className="md:w-1/2 relative h-64 md:h-auto bg-black/10 overflow-hidden cursor-zoom-in flex-shrink-0"
+      onMouseEnter={() => setIsZooming(true)}
+      onMouseLeave={() => setIsZooming(false)}
+      onMouseMove={handleMouseMove}
+    >
+      <div className="absolute inset-0 bg-emerald-900/10 mix-blend-overlay z-10 pointer-events-none"></div>
+      <img 
+        src={image} 
+        alt={name} 
+        referrerPolicy="no-referrer"
+        className="w-full h-full object-cover transition-transform duration-200 ease-out"
+        style={{
+          transformOrigin: `${zoomPos.x} ${zoomPos.y}`,
+          transform: isZooming ? 'scale(2)' : 'scale(1)'
+        }}
+      />
+    </div>
+  );
+};
+
+const ProductCard = React.memo(({ product, index, t, handleProductSelect, addToCart }: any) => (
+  <motion.div
+    initial={{ opacity: 0, y: 30 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    whileHover={{ y: -8, scale: 1.02 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.4, delay: Math.min(index * 0.05, 0.5) }} // Cap delay
+    className="group cursor-pointer"
+    onClick={() => handleProductSelect(product)}
+  >
+    <motion.div 
+      whileHover={{
+        boxShadow: "0 20px 40px rgba(45,212,191,0.2)",
+        borderColor: "rgba(45,212,191,0.3)"
+      }}
+      className="glass-card p-3 h-[400px] flex flex-col mb-4 relative overflow-hidden transition-all duration-300"
+    >
+      <div className="relative w-full h-[280px] rounded-xl overflow-hidden bg-white/5">
+        <div className="absolute inset-0 bg-emerald-900/20 mix-blend-overlay z-10"></div>
+        <img 
+          src={product.image} 
+          alt={product.name} 
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700 ease-out"
+        />
+        
+        <button 
+          className="absolute bottom-4 right-4 z-20 w-10 h-10 rounded-full glass-panel flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:bg-teal-500/30 hover:text-teal-300"
+          onClick={(e) => {
+            e.stopPropagation(); // Avoid triggering the modal
+            addToCart(product);
+          }}
+        >
+          <ShoppingCart size={18} />
+        </button>
+      </div>
+      
+      <div className="mt-4 px-2 flex-grow flex flex-col justify-between">
+        <div>
+          <p className="text-xs text-white/50 mb-1">{t(`product.${product.id}.category`) || product.category}</p>
+          <h4 className="text-white font-medium text-lg leading-tight group-hover:text-teal-300 transition-colors">
+            {t(`product.${product.id}.name`) || product.name}
+          </h4>
+        </div>
+        <div className="flex justify-between items-center mt-2">
+          <span className="text-sm text-white/70">{t(`product.${product.id}.color`) || product.color}</span>
+          <span className="text-white font-semibold">{product.price}</span>
+        </div>
+      </div>
+    </motion.div>
+  </motion.div>
+));
+
 export default function ProductGrid() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
-  const [isZooming, setIsZooming] = useState(false);
-  const [zoomPos, setZoomPos] = useState({ x: '50%', y: '50%' });
   
   // Filtering & Collection State
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -60,7 +145,7 @@ export default function ProductGrid() {
     return () => window.removeEventListener('filter-category', handleFilter as EventListener);
   }, []);
   
-  const handleProductSelect = (product: Product) => {
+  const handleProductSelect = useCallback((product: Product) => {
     setSelectedProduct(product);
     setSelectedSize('M');
     setIsPersonalizing(false);
@@ -68,19 +153,12 @@ export default function ProductGrid() {
     setPersColor('White');
     setPersPlacement('Left Chest');
     window.dispatchEvent(new CustomEvent('product-modal-toggle', { detail: true }));
-  };
+  }, []);
 
-  const closeProductModal = () => {
+  const closeProductModal = useCallback(() => {
     setSelectedProduct(null);
     window.dispatchEvent(new CustomEvent('product-modal-toggle', { detail: false }));
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - left) / width) * 100;
-    const y = ((e.clientY - top) / height) * 100;
-    setZoomPos({ x: `${x}%`, y: `${y}%` });
-  };
+  }, []);
 
   return (
     <section id="collections" className="py-24 px-6 relative z-10 w-full max-w-7xl mx-auto">
@@ -140,58 +218,14 @@ export default function ProductGrid() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {filteredProducts.map((product, index) => (
-            <motion.div
-              key={product.id}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              whileHover={{ y: -8, scale: 1.02 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: index * 0.1 }}
-              className="group cursor-pointer"
-              onClick={() => handleProductSelect(product)}
-            >
-              <motion.div 
-                whileHover={{
-                  boxShadow: "0 20px 40px rgba(45,212,191,0.2)",
-                  borderColor: "rgba(45,212,191,0.3)"
-                }}
-                className="glass-card p-3 h-[400px] flex flex-col mb-4 relative overflow-hidden transition-all duration-300"
-              >
-                <div className="relative w-full h-[280px] rounded-xl overflow-hidden bg-white/5">
-                  <div className="absolute inset-0 bg-emerald-900/20 mix-blend-overlay z-10"></div>
-                  <img 
-                    src={product.image} 
-                    alt={product.name} 
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover opacity-80 group-hover:scale-110 transition-transform duration-700 ease-out"
-                  />
-                  
-                  {/* Floating Add to Cart Button */}
-                  <button 
-                    className="absolute bottom-4 right-4 z-20 w-10 h-10 rounded-full glass-panel flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:bg-teal-500/30 hover:text-teal-300"
-                    onClick={(e) => {
-                      e.stopPropagation(); // Avoid triggering the modal
-                      addToCart(product);
-                    }}
-                  >
-                    <ShoppingCart size={18} />
-                  </button>
-                </div>
-                
-                <div className="mt-4 px-2 flex-grow flex flex-col justify-between">
-                  <div>
-                    <p className="text-xs text-white/50 mb-1">{t(`product.${product.id}.category`) || product.category}</p>
-                    <h4 className="text-white font-medium text-lg leading-tight group-hover:text-teal-300 transition-colors">
-                      {t(`product.${product.id}.name`) || product.name}
-                    </h4>
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-sm text-white/70">{t(`product.${product.id}.color`) || product.color}</span>
-                    <span className="text-white font-semibold">{product.price}</span>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
+            <ProductCard 
+              key={product.id} 
+              product={product} 
+              index={index} 
+              t={t} 
+              handleProductSelect={handleProductSelect} 
+              addToCart={addToCart} 
+            />
           ))}
         </div>
       )}
@@ -210,7 +244,7 @@ export default function ProductGrid() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              transition={{ type: "tween", duration: 0.2 }}
               className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto glass-panel rounded-[2rem] shadow-2xl flex flex-col md:flex-row overflow-hidden"
             >
               <button 
@@ -221,26 +255,9 @@ export default function ProductGrid() {
                 <X size={20} />
               </button>
 
-              <div 
-                className="md:w-1/2 relative h-64 md:h-auto bg-black/10 overflow-hidden cursor-zoom-in"
-                onMouseEnter={() => setIsZooming(true)}
-                onMouseLeave={() => setIsZooming(false)}
-                onMouseMove={handleMouseMove}
-              >
-                <div className="absolute inset-0 bg-emerald-900/10 mix-blend-overlay z-10 pointer-events-none"></div>
-                <img 
-                  src={selectedProduct.image} 
-                  alt={selectedProduct.name} 
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover transition-transform duration-200 ease-out"
-                  style={{
-                    transformOrigin: `${zoomPos.x} ${zoomPos.y}`,
-                    transform: isZooming ? 'scale(2)' : 'scale(1)'
-                  }}
-                />
-              </div>
+              <ProductImageZoom image={selectedProduct.image} name={selectedProduct.name} />
 
-              <div className="md:w-1/2 p-8 md:p-10 flex flex-col bg-white/5 backdrop-blur-xl">
+              <div className="md:w-1/2 p-8 md:p-10 flex flex-col bg-slate-900/90 md:backdrop-blur-xl">
                 <div className="mb-2">
                   <span className="text-xs font-medium text-teal-400 tracking-widest uppercase">{t(`product.${selectedProduct.id}.category`) || selectedProduct.category}</span>
                 </div>
