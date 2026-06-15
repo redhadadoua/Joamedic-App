@@ -1814,6 +1814,29 @@ function UsersManager() {
     role: 'user'
   });
 
+  const syncAuthUsers = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/admin/sync-users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to sync users');
+      }
+      console.log('Sync result:', data.message);
+      // After syncing, fetch from Firestore again
+      await fetchUsers();
+      alert(data.message);
+    } catch (err: any) {
+      console.error('Error syncing Auth users:', err);
+      alert(err.message || 'Error occurred while syncing users from Firebase Auth.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -2004,7 +2027,7 @@ function UsersManager() {
             <Plus size={14} /> Add User
           </button>
           <button
-            onClick={fetchUsers}
+            onClick={syncAuthUsers}
             disabled={loading}
             className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 px-4 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider disabled:opacity-50"
             title="Force synchronization with server"
