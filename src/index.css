@@ -45,6 +45,23 @@ body {
   @apply bg-emerald-950 text-white overflow-x-hidden antialiased;
 }
 
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(2, 44, 34, 1); /* emerald-950 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(45, 212, 191, 0.2); /* teal-400 */
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(45, 212, 191, 0.4);
+}
+
 html[dir="rtl"] body,
 html[dir="rtl"] .font-display,
 html[dir="rtl"] .font-sans {

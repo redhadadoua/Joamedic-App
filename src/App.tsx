@@ -2,13 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
-import ProductGrid from './components/ProductGrid';
-import FabricTech from './components/FabricTech';
-import OurStory from './components/OurStory';
-import Contact from './components/Contact';
 import Footer from './components/Footer';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { CartProvider } from './context/CartContext';
@@ -20,7 +16,21 @@ import BackToTop from './components/BackToTop';
 import ProfileModal from './components/ProfileModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProductsProvider } from './context/ProductsContext';
-import AdminDashboard from './components/AdminDashboard';
+import { Loader } from 'lucide-react';
+
+const ProductGrid = lazy(() => import('./components/ProductGrid'));
+const FabricTech = lazy(() => import('./components/FabricTech'));
+const OurStory = lazy(() => import('./components/OurStory'));
+const Contact = lazy(() => import('./components/Contact'));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
+
+// Modern, sleek loading fallback
+const PageLoader = () => (
+  <div className="w-full py-32 flex flex-col items-center justify-center gap-4 text-white/50">
+    <Loader className="animate-spin text-teal-400" size={32} />
+    <span className="text-sm tracking-widest uppercase font-mono">Loading Section...</span>
+  </div>
+);
 
 function AppContent() {
   const { isAdmin } = useAuth();
@@ -44,7 +54,11 @@ function AppContent() {
 
   // Restructure to enforce Admin role check
   if (isAdminMode && isAdmin) {
-    return <AdminDashboard onExit={() => setIsAdminMode(false)} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AdminDashboard onExit={() => setIsAdminMode(false)} />
+      </Suspense>
+    );
   }
 
   return (
@@ -78,13 +92,15 @@ function AppContent() {
       <main className="relative z-10 flex flex-col overflow-hidden pt-4">
         <Hero />
         <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-8"></div>
-        <ProductGrid />
-        <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
-        <FabricTech />
-        <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
-        <OurStory />
-        <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
-        <Contact />
+        <Suspense fallback={<PageLoader />}>
+          <ProductGrid />
+          <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
+          <FabricTech />
+          <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
+          <OurStory />
+          <div className="w-full max-w-7xl mx-auto h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent my-12"></div>
+          <Contact />
+        </Suspense>
       </main>
 
       <Footer onOpenOrderStatus={() => setIsOrderStatusOpen(true)} theme={theme} setTheme={setTheme} />

@@ -73,6 +73,7 @@ export default function Hero() {
                 src={heroImg1} 
                 alt="Premium Surgeon Scrubs" 
                 referrerPolicy="no-referrer"
+                fetchPriority="high"
                 initial={{ opacity: 0, scale: 1.05 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 1.0, ease: [0.4, 0, 0.2, 1] }}

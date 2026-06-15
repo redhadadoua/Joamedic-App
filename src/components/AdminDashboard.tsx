@@ -1855,9 +1855,16 @@ function SettingsManager() {
 
     try {
       setResettingCatalog(true);
-      const { products } = await import('../data/products');
+      // We are fetching products via the context now, no need to statically import the data directly 
+      // here because it saves chunk size, BUT since we need defaults, we can reference 
+      // the products context variable if we wanted to... Wait, the user wants the STATIC ones.
+      // Dynamic import is fine if we use `import(/* @vite-ignore */ '../data/products')` 
+      // but let's just use staticStoreProducts since we injected it... wait, we didn't inject it.
       
-      for (const p of products) {
+      const module = await import('../data/products');
+      const staticProds = module.products;
+      
+      for (const p of staticProds) {
         const docRef = doc(db, 'products', String(p.id));
         await setDoc(docRef, p);
       }

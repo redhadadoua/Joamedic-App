@@ -3,7 +3,7 @@ import { X, Trash2, Plus, Minus, ShoppingBag } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useLanguage } from '../i18n/LanguageContext';
 
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const SIZES = ['M', 'L', 'XL'];
 
 export default function CartDrawer() {
   const { isCartOpen, setIsCartOpen, setIsCheckoutOpen, cartItems, removeFromCart, updateQuantity, updateSize, cartTotal } = useCart();
@@ -54,15 +54,14 @@ export default function CartDrawer() {
                 </div>
               ) : (
                 cartItems.map((item, index) => (
-                  <div key={`${item.id}-${index}`} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 relative">
+                  <div key={`${item.id}-${item.color}-${item.size}-${index}`} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 relative">
                     <img src={item.image} alt={item.name} className="w-20 h-28 object-cover rounded-xl" />
                     <div className="flex-1 flex flex-col justify-between">
                       <div>
                         <h3 className="text-white font-medium text-sm leading-tight pr-6">{t(`product.${item.id}.name`) || item.name}</h3>
-                        <p className="text-white/60 text-xs mt-0.5">{t(`product.${item.id}.color`) || item.color}</p>
+                        <p className="text-white/60 text-xs mt-0.5">{item.color}</p>
                         <p className="text-teal-300 font-semibold mt-1">
                           {item.price}
-                          {item.personalization && <span className="text-xs text-white/50 ml-2">(+{item.personalization.price} DA)</span>}
                         </p>
                         
                         <div className="mt-2 flex items-center gap-2">
@@ -70,7 +69,7 @@ export default function CartDrawer() {
                           <select 
                             id={`size-${item.id}-${index}`}
                             value={item.size || 'M'}
-                            onChange={(e) => updateSize(item.id, e.target.value)}
+                            onChange={(e) => updateSize(item.id, e.target.value, item.size, item.color)}
                             className="bg-black/30 text-white text-xs py-1 px-2 rounded-md border border-white/10 focus:outline-none focus:border-teal-400/50 appearance-none cursor-pointer"
                           >
                             {SIZES.map(size => (
@@ -78,29 +77,18 @@ export default function CartDrawer() {
                             ))}
                           </select>
                         </div>
-                        {item.personalization && (
-                          <div className="mt-2 bg-black/20 rounded-md p-2 border border-white/5">
-                            <p className="text-xs text-white/70 truncate flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0"></span>
-                              {item.personalization.text}
-                            </p>
-                            <p className="text-[10px] text-white/40 mt-1 pl-2.5">
-                              {item.personalization.color} • {item.personalization.placement}
-                            </p>
-                          </div>
-                        )}
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center gap-3 bg-black/20 rounded-full px-2 py-1 border border-white/10">
-                          <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.size, item.personalization?.text)} className="text-white/70 hover:text-white">
+                          <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.size, undefined, item.color)} className="text-white/70 hover:text-white">
                             <Minus size={14} />
                           </button>
                           <span className="text-white text-sm w-4 text-center">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.size, item.personalization?.text)} className="text-white/70 hover:text-white">
+                          <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.size, undefined, item.color)} className="text-white/70 hover:text-white">
                             <Plus size={14} />
                           </button>
                         </div>
-                        <button onClick={() => removeFromCart(item.id, item.size, item.personalization?.text)} className="text-red-400/80 hover:text-red-300 p-1 transition-colors absolute top-4 right-4" aria-label={t('cart.remove')}>
+                        <button onClick={() => removeFromCart(item.id, item.size, undefined, item.color)} className="text-red-400/80 hover:text-red-300 p-1 transition-colors absolute top-4 right-4" aria-label={t('cart.remove')}>
                           <Trash2 size={16} />
                         </button>
                       </div>

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ShieldCheck, MapPin, Banknote, CheckCircle2, User, AlertCircle } from 'lucide-react';
+import { X, ShieldCheck, MapPin, Banknote, CheckCircle2, User, AlertCircle, ShoppingBag, Phone, Home } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { wilayas, getCommunesByWilayaId } from 'algeria-locations';
 
 export default function CheckoutModal() {
@@ -20,81 +20,29 @@ export default function CheckoutModal() {
   const [progressMessage, setProgressMessage] = useState<string>('');
 
   const getProgressLabel = (step: string) => {
-    if (language === 'AR') {
-      switch (step) {
-        case 'preparing':
-          return 'جاري إعداد وتحليل بيانات طلبك الطبي...';
-        case 'fetching_config':
-          return 'جاري جلب إعدادات المزامنة النشطة...';
-        case 'verifying_internet':
-          return 'جاري التحقق من مسار الاتصال بالإنترنت...';
-        case 'verifying_firestore':
-          return 'جاري اختبار الاتصال بقاعدة البيانات الآمنة (Firestore)...';
-        case 'verifying_sheets':
-          return 'جاري اختبار وصول نقطة اتصال Google Sheets...';
-        case 'connection_verified':
-          return 'تم تأكيد سلامة قنوات الاتصال بنجاح!';
-        case 'local_backup':
-          return 'جاري حفظ نسخة احتياطية محلية في المتصفح...';
-        case 'firestore':
-          return 'جاري نقل وتأمين الطلب في قاعدة البيانات السحابية (Firestore)...';
-        case 'google_sheets':
-          return 'جاري مزامنة وتوثيق الطلب في سجل Google Sheets الإداري...';
-        case 'done':
-          return 'تم تأكيد طلبك العيادي وتوثيقه بنجاح!';
-        default:
-          return progressMessage || 'جاري معالجة وتأكيد طلبك الطبي...';
-      }
-    } else if (language === 'FR') {
-      switch (step) {
-        case 'preparing':
-          return 'Préparation et validation de votre commande médicale...';
-        case 'fetching_config':
-          return 'Récupération des paramètres d\'échantillonnage...';
-        case 'verifying_internet':
-          return 'Vérification de la passerelle de connexion Internet...';
-        case 'verifying_firestore':
-          return 'Test de la liaison de données sécurisée Firestore...';
-        case 'verifying_sheets':
-          return 'Vérification de la liaison dynamique Google Sheets...';
-        case 'connection_verified':
-          return 'Toutes les lignes de communication sont vérifiées !';
-        case 'local_backup':
-          return 'Sauvegarde locale instantanée dans le cache...';
-        case 'firestore':
-          return 'Envoi et stockage sécurisé du dossier sur Firestore...';
-        case 'google_sheets':
-          return 'Mise à jour directe du tableau Google Sheets...';
-        case 'done':
-          return 'Commande clinique transmise et enregistrée !';
-        default:
-          return progressMessage || 'Traitement de votre commande médicale...';
-      }
-    } else {
-      switch (step) {
-        case 'preparing':
-          return 'Preparing and validating clinical request data...';
-        case 'fetching_config':
-          return 'Retrieving active integration settings...';
-        case 'verifying_internet':
-          return 'Verifying active internet route and gateway...';
-        case 'verifying_firestore':
-          return 'Pinging secure cloud database (Firestore) gateway...';
-        case 'verifying_sheets':
-          return 'Testing secure Apps Script Web App route...';
-        case 'connection_verified':
-          return 'All communication routes successfully verified!';
-        case 'local_backup':
-          return 'Backing up order locally in offline cache...';
-        case 'firestore':
-          return 'Saving medical registry record securely to Firestore...';
-        case 'google_sheets':
-          return 'Synchronizing records securely with Google Sheets...';
-        case 'done':
-          return 'Clinical order verified and processed successfully!';
-        default:
-          return progressMessage || 'Processing and confirming your medical order...';
-      }
+    switch (step) {
+      case 'preparing':
+        return 'جاري إعداد وتحليل بيانات طلبك الطبي...';
+      case 'fetching_config':
+        return 'جاري جلب إعدادات المزامنة النشطة...';
+      case 'verifying_internet':
+        return 'جاري التحقق من مسار الاتصال بالإنترنت...';
+      case 'verifying_firestore':
+        return 'جاري اختبار الاتصال بقاعدة البيانات الآمنة (Firestore)...';
+      case 'verifying_sheets':
+        return 'جاري اختبار وصول سجل مبيعات Google Sheets...';
+      case 'connection_verified':
+        return 'تم تأكيد سلامة قنوات الاتصال بنجاح!';
+      case 'local_backup':
+        return 'جاري حفظ نسخة احتياطية محلية في المتصفح...';
+      case 'firestore':
+        return 'جاري نقل وتأمين الطلب في قاعدة البيانات السحابية (Firestore)...';
+      case 'google_sheets':
+        return 'جاري مزامنة وتوثيق الطلب في سجل Google Sheets الإداري...';
+      case 'done':
+        return 'تم تأكيد طلبك العيادي وتوثيقه بنجاح!';
+      default:
+        return progressMessage || 'جاري معالجة وتأكيد طلبك الطبي...';
     }
   };
 
@@ -137,20 +85,10 @@ export default function CheckoutModal() {
     } catch (err: any) {
       console.error("Checkout Google Sign-In failed:", err);
       let friendly = err.message || 'Google authentication failed.';
-      if (err.code === 'auth/popup-blocked' || err.message?.includes('popup-blocked') || err.message?.includes('popup_blocked')) {
-        friendly = language === 'AR'
-          ? 'تم حظر النافذة المنبثقة لتسجيل الدخول بواسطة متصفحك. يرجى السماح بالنوافذ المنبثقة أو فتح التطبيق في علامة تبويب جديدة.'
-          : language === 'FR'
-          ? 'La fenêtre de connexion a été bloquée par votre navigateur. Veuillez autoriser les popups ou ouvrir l\'application dans un nouvel onglet.'
-          : 'The login popup was blocked by your browser. Please allow popups or open the app in a new tab.';
+      if (err.code === 'auth/popup-blocked' || err.message?.includes('popup-blocked')) {
+        friendly = 'تم حظر النافذة المنبثقة لتسجيل الدخول بواسطة متصفحك. يرجى السماح بالنوافذ المنبثقة أو فتح التطبيق في علامة تبويب جديدة.';
       } else if (err.code === 'auth/popup-closed-by-user' || err.message?.includes('popup-closed-by-user')) {
-        friendly = language === 'AR'
-          ? 'تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية. يرجى المحاولة مجدداً.'
-          : language === 'FR'
-          ? 'La fenêtre de connexion a été fermée avant la fin. Veuillez réessayer.'
-          : 'The login window was closed. Please click Google Sign-In and complete the login.';
-      } else if (err.code === 'auth/cancelled-popup-request' || err.message?.includes('cancelled-popup-request')) {
-        friendly = 'The login request was cancelled. Please try again.';
+        friendly = 'تم إغلاق نافذة تسجيل الدخول قبل إتمام العملية. يرجى المحاولة مجدداً.';
       }
       setErrorMsg(friendly);
     }
@@ -174,28 +112,7 @@ export default function CheckoutModal() {
       setCheckoutState('success');
     } catch (error: any) {
       console.error("Error creating order: ", error);
-      
-      let debugText = "";
-      if (error && error.message) {
-        try {
-          const parsed = JSON.parse(error.message);
-          if (parsed && parsed.error) {
-            debugText = ` (${parsed.error})`;
-          } else {
-            debugText = ` (${error.message})`;
-          }
-        } catch {
-          debugText = ` (${error.message})`;
-        }
-      }
-
-      setErrorMsg(
-        language === 'AR' 
-          ? `عذراً! واجهنا خطأ أثناء معالجة طلبك الطبي.${debugText} يرجى التحقق من اتصال الشبكة وإعادة المحاولة.` 
-          : language === 'FR'
-          ? `Désolé ! Une erreur est survenue lors du traitement de votre commande.${debugText} Veuillez vérifier votre connexion et réessayer.`
-          : `Oops! We encountered an error while processing your clinical order.${debugText} Please check your network connection and retry.`
-      );
+      setErrorMsg(`عذراً! واجهنا خطأ أثناء معالجة طلبك الطبي. يرجى التحقق من اتصال الشبكة وإعادة المحاولة.`);
       setCheckoutState('form');
     }
   };
@@ -205,165 +122,216 @@ export default function CheckoutModal() {
   return (
     <AnimatePresence>
       {isCheckoutOpen && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6 select-none leading-normal">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={checkoutState === 'success' ? handleSuccessClose : handleClose}
-            className="absolute inset-0 bg-emerald-950/80 backdrop-blur-md"
+            className="absolute inset-0 bg-emerald-950/85 backdrop-blur-md"
           />
           
           <motion.div
-            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+            initial={{ opacity: 0, y: 30, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 30, scale: 0.95 }}
-            className="relative w-full max-w-2xl glass-panel shadow-2xl flex flex-col overflow-hidden max-h-[90vh]"
+            exit={{ opacity: 0, y: 30, scale: 0.97 }}
+            className="relative w-full max-w-4xl glass-panel shadow-2xl flex flex-col overflow-hidden max-h-[95vh] rounded-[2rem] border border-white/10"
           >
             {checkoutState !== 'processing' && (
               <button
                 onClick={checkoutState === 'success' ? handleSuccessClose : handleClose}
-                className="absolute top-6 right-6 w-8 h-8 rounded-full glass-panel flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors z-20"
+                className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 hover:scale-105 flex items-center justify-center text-white/80 hover:text-white transition-all z-20"
+                aria-label="Close"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             )}
 
-            <div className="overflow-y-auto overflow-x-hidden no-scrollbar">
+            <div className="overflow-y-auto no-scrollbar">
               {checkoutState === 'form' && (
-                <div className="p-8 pb-12">
-                  <div className="flex items-center gap-3 mb-8">
-                    <div className="w-10 h-10 rounded-full bg-teal-500/20 text-teal-300 flex items-center justify-center">
-                      <ShieldCheck size={20} />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-12">
+                  
+                  {/* Left Column: Order Sumary Review (Desktop only or top) */}
+                  <div className="md:col-span-5 p-6 bg-slate-950/40 border-b md:border-b-0 md:border-l border-white/10 flex flex-col justify-between">
                     <div>
-                      <h2 className="text-2xl font-display font-semibold text-white tracking-tight">
-                        {t('checkout.title')}
-                      </h2>
-                      <p className="text-white/50 text-sm mt-1">{cartItems.length} {t('orderStatus.items')} • {cartTotal} DA</p>
+                      <div className="flex items-center gap-2 mb-6">
+                        <ShoppingBag className="text-teal-400" size={18} />
+                        <h4 className="text-xs font-bold text-white/50 uppercase tracking-widest">مراجعة المشتريات • Order Summary</h4>
+                      </div>
+
+                      <div className="space-y-4 max-h-[280px] overflow-y-auto pr-2 no-scrollbar">
+                        {cartItems.map((item, index) => (
+                          <div key={`${item.id}-${index}`} className="flex gap-4 p-3 rounded-xl bg-white/5 border border-white/5">
+                            <img src={item.image} alt={item.name} className="w-12 h-16 object-cover rounded-md" />
+                            <div className="flex-1 min-w-0">
+                              <h5 className="text-white text-xs font-bold truncate">{item.name}</h5>
+                              <p className="text-[11px] text-white/60 mt-0.5">اللون: {item.color}</p>
+                              <p className="text-[11px] text-white/60">المقاس: {item.size || 'M'}</p>
+                              <div className="flex justify-between items-center mt-1">
+                                <span className="text-teal-300 text-xs font-semibold">{item.price}</span>
+                                <span className="text-[11px] text-white/40">الكمية: {item.quantity}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-6 pt-6 border-t border-white/15 space-y-3 font-sans">
+                      <div className="flex justify-between text-xs text-white/60">
+                        <span>المجموع الفرعي:</span>
+                        <span>{cartTotal} DA</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-white/60">
+                        <span>الشحن والوصول:</span>
+                        <span className="text-teal-400">مجاني • Complimentary</span>
+                      </div>
+                      <div className="h-[1px] bg-white/10 w-full my-2"></div>
+                      <div className="flex justify-between text-sm font-bold text-white">
+                        <span>المبلغ الإجمالي الكلي:</span>
+                        <span className="text-lg text-teal-300">{cartTotal} DA</span>
+                      </div>
                     </div>
                   </div>
 
-                  <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-                    {errorMsg && (
-                      <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs rounded-xl p-4 flex items-center gap-2">
-                        <AlertCircle size={16} className="text-red-400 shrink-0" />
-                        <span>{errorMsg}</span>
+                  {/* Right Column: Checkout Form */}
+                  <div className="md:col-span-7 p-8">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 rounded-full bg-teal-500/10 text-teal-300 flex items-center justify-center">
+                        <ShieldCheck size={20} />
                       </div>
-                    )}
-                    {!user && (
-                      <div className="bg-teal-500/10 border border-teal-500/20 rounded-xl p-4 flex flex-col gap-3">
-                        <p className="text-teal-200/90 text-sm">
-                          {language === 'AR' 
-                            ? 'يمكنك تسجيل الدخول لحفظ طلبك وتتبعه لاحقاً في حسابك، أو إكمال الطلب مباشرة كزائر!' 
-                            : language === 'FR'
-                            ? 'Connectez-vous pour enregistrer votre commande sur votre profil, ou continuez directement en tant qu\'invité !'
-                            : 'Sign in with Google to save your order history in your profile, or place your order directly as a guest!'}
-                        </p>
-                        <button type="button" onClick={handleGoogleSignIn} className="glass-button bg-teal-400/20 border-teal-400/30 hover:bg-teal-400/30 text-white py-2 px-4 rounded-lg text-xs w-max transition-all">
-                          {language === 'AR' ? 'تسجيل الدخول مع Google' : language === 'FR' ? 'Se connecter avec Google' : 'Sign In with Google'}
-                        </button>
-                      </div>
-                    )}
-                    {/* Shipping Info */}
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-sm font-medium text-teal-400 uppercase tracking-wider">{t('checkout.shipping')}</h3>
-                        <MapPin size={18} className="text-white/30" />
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <input required type="text" placeholder={t('checkout.name')} value={shippingInfo.name} onChange={e => setShippingInfo({...shippingInfo, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors" />
-                        <input required type="tel" pattern="[0-9]*" onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, ''); }} placeholder={t('checkout.phone')} value={shippingInfo.phone} onChange={e => setShippingInfo({...shippingInfo, phone: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors" />
-                        <select required value={selectedWilayaId} onChange={handleWilayaChange} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors appearance-none cursor-pointer">
-                          <option value="" disabled>{t('checkout.wilaya')}</option>
-                          {wilayas.map((w: any) => (
-                            <option key={w.id} value={w.id} className="bg-emerald-950 text-white">{w.code} - {w.name}</option>
-                          ))}
-                        </select>
-                        <select required value={shippingInfo.city} onChange={e => setShippingInfo({...shippingInfo, city: e.target.value})} disabled={!selectedWilayaId} className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors appearance-none cursor-pointer disabled:opacity-50">
-                          <option value="" disabled>{t('checkout.city')}</option>
-                          {communes.map((c: any) => (
-                            <option key={c.id} value={c.name} className="bg-emerald-950 text-white">{c.name}</option>
-                          ))}
-                        </select>
-                        <input required type="text" placeholder={t('checkout.address')} value={shippingInfo.address} onChange={e => setShippingInfo({...shippingInfo, address: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white placeholder:text-white/40 focus:outline-none focus:border-teal-400/50 transition-colors sm:col-span-2" />
+                      <div>
+                        <h2 className="text-xl font-display font-semibold text-white tracking-tight">
+                          إتمام الشراء الآمن
+                        </h2>
+                        <p className="text-white/40 text-xs mt-0.5">تعبئة البيانات مخصصة لخدمة التوصيل السريع</p>
                       </div>
                     </div>
 
-                    {/* Divider */}
-                    <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                      {errorMsg && (
+                        <div className="bg-red-500/10 border border-red-500/20 text-red-300 text-xs rounded-xl p-4 flex items-center gap-2">
+                          <AlertCircle size={16} className="text-red-400 shrink-0" />
+                          <span>{errorMsg}</span>
+                        </div>
+                      )}
 
-                    {/* Payment Info */}
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-sm font-medium text-teal-400 uppercase tracking-wider">{t('checkout.payment')}</h3>
-                        <Banknote size={18} className="text-teal-400" />
-                      </div>
-                      <div className="bg-teal-900/20 border border-teal-500/20 rounded-xl p-5 flex items-start gap-4">
-                        <div className="mt-1 w-5 h-5 rounded-full border-4 border-teal-500 bg-emerald-950 flex-shrink-0"></div>
-                        <div>
-                          <p className="text-white font-medium">{t('checkout.cod')}</p>
-                          <p className="text-white/60 text-sm mt-1">{t('checkout.codDesc')}</p>
+                      {!user && (
+                        <div className="bg-teal-500/10 border border-teal-500/20 rounded-xl p-4 flex flex-col gap-3">
+                          <p className="text-teal-200/95 text-xs">
+                            يمكنك تسجيل الدخول لحفظ وتتبع سجل طلبك تلقائياً في ثوانٍ، أو إتمام الطلب مباشرة كزائر!
+                          </p>
+                          <button type="button" onClick={handleGoogleSignIn} className="glass-button bg-teal-400/20 border-teal-400/30 hover:bg-teal-400/30 text-white py-1.5 px-4 rounded-lg text-xs w-max transition-all">
+                            تسجيل الدخول مع Google
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="space-y-4">
+                        <h3 className="text-xs font-bold text-teal-400 uppercase tracking-wider mb-2">بيانات الشحن والتوصيل</h3>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="relative flex items-center">
+                            <span className="absolute left-4 text-white/30"><User size={16} /></span>
+                            <input required type="text" placeholder="الاسم الكامل" value={shippingInfo.name} onChange={e => setShippingInfo({...shippingInfo, name: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-teal-400/50 transition-all font-sans" />
+                          </div>
+
+                          <div className="relative flex items-center">
+                            <span className="absolute left-4 text-white/30"><Phone size={16} /></span>
+                            <input required type="tel" pattern="[0-9]*" onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, ''); }} placeholder="رقم الهاتف" value={shippingInfo.phone} onChange={e => setShippingInfo({...shippingInfo, phone: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-teal-400/50 transition-all font-sans" />
+                          </div>
+
+                          <select required value={selectedWilayaId} onChange={handleWilayaChange} className="w-full bg-slate-900 border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-teal-400/50 transition-colours appearance-none cursor-pointer">
+                            <option value="" disabled>اختر الولاية</option>
+                            {wilayas.map((w: any) => (
+                              <option key={w.id} value={w.id} className="bg-emerald-950 text-white">{w.code} - {w.name}</option>
+                            ))}
+                          </select>
+
+                          <select required value={shippingInfo.city} onChange={e => setShippingInfo({...shippingInfo, city: e.target.value})} disabled={!selectedWilayaId} className="w-full bg-slate-900 border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-teal-400/50 transition-colours appearance-none cursor-pointer disabled:opacity-40">
+                            <option value="" disabled>اختر البلدية</option>
+                            {communes.map((c: any) => (
+                              <option key={c.id} value={c.name} className="bg-emerald-950 text-white">{c.name}</option>
+                            ))}
+                          </select>
+
+                          <div className="relative flex items-center sm:col-span-2">
+                            <span className="absolute left-4 text-white/30"><Home size={16} /></span>
+                            <input required type="text" placeholder="عنوان الشحن بالتفصيل (الحي، المجموعة أو الشارع)" value={shippingInfo.address} onChange={e => setShippingInfo({...shippingInfo, address: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-teal-400/50 transition-all font-sans" />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <button 
-                      type="submit"
-                      className="w-full mt-2 glass-button shine-effect bg-teal-500/20 border-teal-400/40 hover:bg-teal-500/30 text-white font-medium py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(45,212,191,0.15)] focus:outline-none focus:ring-2 focus:ring-teal-400/50 focus:ring-offset-2 focus:ring-offset-transparent"
-                    >
-                      {t('checkout.placeOrder')} - {cartTotal} DA
-                    </button>
-                  </form>
+                      <div className="space-y-4">
+                        <h3 className="text-xs font-bold text-teal-400 uppercase tracking-wider mb-2">طريقة الدفع</h3>
+                        <div className="bg-teal-950/30 border border-teal-500/20 rounded-2xl p-4 flex items-start gap-4 shadow-sm">
+                          <div className="mt-1 w-5 h-5 rounded-full border-[5px] border-teal-400 bg-emerald-950 flex-shrink-0"></div>
+                          <div>
+                            <p className="text-white text-sm font-bold">الدفع نقداً عند الاستلام (COD)</p>
+                            <p className="text-white/50 text-xs mt-1">يرجى توفير قيمة الطلب نقداً عند وصول مندوب التوصيل لمقر عملكم أو عيادتكم.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button 
+                        type="submit"
+                        className="w-full bg-gradient-to-r from-teal-500/30 to-emerald-500/30 border border-teal-400/40 hover:from-teal-500/40 hover:to-emerald-500/40 text-teal-200 font-bold py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(45,212,191,0.15)] focus:outline-none flex items-center justify-center gap-2 text-sm uppercase tracking-wide"
+                      >
+                        تأكيد الطلب الطبي - {cartTotal} DA
+                      </button>
+                    </form>
+                  </div>
                 </div>
               )}
 
               {checkoutState === 'processing' && (
-                <div className="p-16 flex flex-col items-center justify-center min-h-[400px] gap-6">
-                  <div className="relative w-20 h-20">
-                     <div className="absolute inset-0 rounded-full border-2 border-white/10"></div>
-                     <div className="absolute inset-0 rounded-full border-2 border-teal-400 border-t-transparent animate-spin"></div>
+                <div className="p-16 flex flex-col items-center justify-center min-h-[450px] gap-6">
+                  <div className="relative w-24 h-24">
+                     <div className="absolute inset-0 rounded-full border-4 border-white/5"></div>
+                     <div className="absolute inset-0 rounded-full border-4 border-teal-400 border-t-transparent animate-spin"></div>
                      <div className="absolute inset-0 flex items-center justify-center text-teal-400">
-                       <ShieldCheck size={28} className="animate-pulse" />
+                       <ShieldCheck size={36} className="animate-pulse" />
                      </div>
                   </div>
-                  <div className="text-center space-y-2 max-w-md">
-                    <p className="text-teal-300 font-medium animate-pulse text-lg tracking-wide">{t('checkout.processing')}</p>
-                    <p className="text-white/40 text-[11px] leading-relaxed">Securing your clinical order in the registry. Please wait...</p>
+                  <div className="text-center space-y-3 max-w-sm">
+                    <p className="text-teal-300 font-bold text-lg tracking-wide animate-pulse">
+                      {getProgressLabel(progressStep)}
+                    </p>
+                    <p className="text-white/35 text-[11px] leading-relaxed">يرجى الانتظار بينما نقوم بحفظ طلبك وتوثيقه في السحابة وسجلات العمل...</p>
                   </div>
                 </div>
               )}
 
               {checkoutState === 'success' && (
                 <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }} 
+                  initial={{ opacity: 0, scale: 0.96 }} 
                   animate={{ opacity: 1, scale: 1 }} 
-                  className="p-10 flex flex-col items-center text-center min-h-[400px] justify-center"
+                  className="p-12 flex flex-col items-center text-center min-h-[450px] justify-center"
                 >
                   <motion.div 
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', damping: 15, delay: 0.1 }}
-                    className="w-20 h-20 rounded-full bg-teal-500/20 text-teal-400 flex items-center justify-center mb-6"
+                    className="w-24 h-24 rounded-full bg-teal-500/10 text-teal-400 flex items-center justify-center mb-6 border border-teal-500/20"
                   >
-                    <CheckCircle2 size={40} className="drop-shadow-[0_0_15px_rgba(45,212,191,0.5)]" />
+                    <CheckCircle2 size={48} className="drop-shadow-[0_0_15px_rgba(45,212,191,0.4)]" />
                   </motion.div>
                   
-                  <h2 className="text-3xl font-display font-bold text-white mb-4">
-                    {t('checkout.success')}
+                  <h2 className="text-3xl font-display font-extrabold text-white mb-3">
+                    تم تأكيد طلبك بنجاح!
                   </h2>
-                  <p className="text-white/60 mb-2">
-                    {t('checkout.successDesc')}
+                  <p className="text-white/60 mb-6 max-w-md text-sm leading-relaxed">
+                    شكراً لشرائك من جوامديك. لقد تم إرسال وسيردك اتصال هاتفي من فريق الدعم لتأكيد الشحن الفوري. رقم طلبك الإداري الفريد للتتبع:
                   </p>
-                  <p className="text-teal-300 font-mono text-xl mb-10 tracking-widest bg-white/5 py-2 px-6 rounded-lg pointer-events-auto select-all">
+                  <p className="text-teal-300 font-mono text-2xl mb-12 tracking-widest bg-white/5 py-3 px-8 rounded-2xl border border-white/5 pointer-events-auto select-all shadow-inner">
                     {orderId}
                   </p>
 
                   <button 
                     onClick={handleSuccessClose}
-                    className="w-full max-w-sm glass-button shine-effect bg-white/5 border border-white/10 hover:bg-white/10 text-white font-medium py-4 rounded-xl transition-all"
+                    className="w-full max-w-sm bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold py-4 rounded-xl transition-all"
                   >
-                    {t('checkout.continueShopping')}
+                    متابعة العرض والتسوق
                   </button>
                 </motion.div>
               )}

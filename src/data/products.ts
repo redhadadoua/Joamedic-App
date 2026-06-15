@@ -5,77 +5,39 @@ import img013 from '../assets/images/013.jpg';
 import imgSami10 from '../assets/images/sami 10.jpg';
 import imgSami10sc from '../assets/images/sami 10sc.jpg';
 import imgSami11 from '../assets/images/sami 11.jpeg';
-import imgSamiSdqc from '../assets/images/sami sdqc.jpg';
 
 export const products: Product[] = [
   {
     id: 1,
-    name: "Sami 10",
+    name: "Joamedic Elite Scrubs",
     category: "Premium Scrubs",
     price: "3700 DA",
-    image: imgSami10,
-    color: "Classic Blue",
-    specs: ["4-Way Stretch Yarn", "Antibacterial Finish", "Reinforced Seams", "Moisture-Wicking"],
-    description: "Our signature high-performance scrub set designed for maximum ease and fluid resistance during long clinical shifts."
-  },
-  {
-    id: 2,
-    name: "Sami 10sc",
-    category: "Slim-Fit Scrubs",
-    price: "3700 DA",
-    image: imgSami10sc,
-    color: "Steel Teal",
-    specs: ["Athletic Comfort Slits", "Stain Repellent technology", "Wrinkle-Resistant weave", "Hidden badge hanger"],
-    description: "Engineered specifically for fast-paced professional workflows. Experience breathable, sports-grade flex panels."
-  },
-  {
-    id: 3,
-    name: "Sami 11",
-    category: "Women's Scrubs",
-    price: "3700 DA",
-    image: imgSami11,
-    color: "Orchid Violet",
-    specs: ["Ultra-Soft Yoga waistband", "6-Pocket storage array", "Zinc-Ion antimicrobial fabric", "Fade-Proof dye"],
-    description: "The ideal balance of luxury feel and dynamic storage. Engineered to resist extreme wash temperatures."
-  },
-  {
-    id: 4,
-    name: "Sami SDQC",
-    category: "Clinical Suits",
-    price: "3700 DA",
-    image: imgSamiSdqc,
-    color: "Surgical Emerald",
-    specs: ["Deep side pockets", "Stain Barrier protection", "Triple-Lock flat seams", "Anti-dust coat"],
-    description: "Standard surgery-grade uniform suited for clinical precision. Maximum fluid repellence and durability."
-  },
-  {
-    id: 5,
-    name: "013",
-    category: "Men's Scrubs",
-    price: "3700 DA",
-    image: img013,
-    color: "Charcoal Grey",
-    specs: ["Heavy duty stitch-blend", "4 large tool pockets", "Odor-Lock active fibers", "Flexible V-Neck"],
-    description: "Top tier reliability for demanding specialists. Offers a structured but completely flexible silhouette."
-  },
-  {
-    id: 6,
-    name: "012",
-    category: "Lab Coats",
-    price: "3700 DA",
-    image: img012,
-    color: "Classic White",
-    specs: ["Optic stain guard", "Concealed inner storage", "Anti-Static thread blend", "Telescopic sleeves"],
-    description: "Elegant, tailored doctor's lab coat. Infused with double nanotech fluid repellent for perfect hygiene."
-  },
-  {
-    id: 7,
-    name: "011",
-    category: "Exclusive Scrubs",
-    price: "3700 DA",
-    image: img011,
-    color: "Desert Sand",
-    specs: ["Premium organic cotton-blend", "Invisible zipper pockets", "Ventilation eyelets", "Dura-color guarantee"],
-    description: "Limited edition luxury scrub set in earth tones. Heavy-duty construction with a featherlight cashmere touch."
+    image: imgSami10, // default Royal Blue
+    color: "Royal Blue",
+    specs: [
+      "تمدد فائق في 4 اتجاهات للحركة الحرة",
+      "تصميم مقاوم للسوائل والبكتيريا والروائح",
+      "خياطة متينة ومريحة ضد التحسس",
+      "جيوب ذكية واسعة ومتعددة لتخزين الأدوات"
+    ],
+    description: "المجموعة الطبية المتكاملة والنخبوية للرعاية الصحية الفاخرة. صنعت خصيصاً لأدق الفترات الطبية والمناوبات الطويلة بمزيج من خيوط تمدد مرنة وتقنيات مضادة للمجاهر السائلة."
   }
 ];
+
+export interface ColorOption {
+  name: string;
+  nameAr: string;
+  image: string;
+  colorClass: string;
+}
+
+export const colorOptions: ColorOption[] = [
+  { name: 'White', nameAr: 'أبيض', image: img012, colorClass: 'bg-white border-white/20' },
+  { name: 'Black', nameAr: 'أسود', image: img013, colorClass: 'bg-slate-950 border-white/20' },
+  { name: 'Garent', nameAr: 'خمري (Garent)', image: imgSami11, colorClass: 'bg-red-800 border-white/20' },
+  { name: 'Light Blue', nameAr: 'أزرق فاتح', image: imgSami10sc, colorClass: 'bg-sky-400 border-white/20' },
+  { name: 'Royal Blue', nameAr: 'أزرق ملكي', image: imgSami10, colorClass: 'bg-blue-700 border-white/20' },
+  { name: 'Grey', nameAr: 'رمادي', image: img011, colorClass: 'bg-neutral-500 border-white/20' }
+];
+
+export const sizeOptions = ['M', 'L', 'XL'];

@@ -173,31 +173,37 @@ export default function ProfileModal({ isOpen, onClose, onOpenAdmin }: { isOpen:
     try {
       if (authMode === 'signin') {
         await signIn(email, password);
-        setAuthSuccess('Welcome back code verified successfully!');
-        setTimeout(() => setAuthSuccess(''), 3000);
+        setAuthSuccess('تم تسجيل الدخول بنجاح! جاري تحضير المتجر...');
+        setTimeout(() => {
+          setAuthSuccess('');
+          onClose();
+        }, 1200);
       } else {
         if (!displayName.trim()) {
-          throw new Error('Please enter your full name to print on certificates.');
+          throw new Error('الرجاء إدخال اسمك الكامل لتسجيل حسابك الرعاية.');
         }
         if (!phoneNumber.trim()) {
-          throw new Error('Please enter a phone number to enable instant order alerts.');
+          throw new Error('الرجاء إدخال رقم هاتفك لتلقي إشعارات التوصيل السريع.');
         }
         await signUp(email, password, displayName.trim(), phoneNumber.trim());
-        setAuthSuccess('Congratulations! Your clinical account has been instantiated.');
-        setTimeout(() => setAuthSuccess(''), 3000);
+        setAuthSuccess('تم إنشاء حسابك الجديد بنجاح! جاري توجيهك...');
+        setTimeout(() => {
+          setAuthSuccess('');
+          onClose();
+        }, 1200);
       }
     } catch (err: any) {
       console.error(err);
-      let friendlyMessage = err.message || 'Authentication sequence failed.';
+      let friendlyMessage = err.message || 'فشلت عملية التحقق الأمينة. يرجى مراجعة إدخالاتك.';
       if (err.code === 'auth/operation-not-allowed' || (err.message && err.message.includes('auth/operation-not-allowed')) || (err.message && err.message.includes('operation-not-allowed'))) {
         setShowOperationNotAllowedGuide(true);
-        friendlyMessage = 'Authentication Method Disabled: Please follow the integration instructions below to enable Email/Password provider in the Firebase Console.';
+        friendlyMessage = 'شكل الاتصال غير مفعل: يرجى تفعيل الدخول البريدي في لوحة معلومات السحابة.';
       } else if (err.code === 'auth/email-already-in-use') {
-        friendlyMessage = 'This medical email registry is already associated with another account.';
+        friendlyMessage = 'إن هذا البريد الإلكتروني مسجل مسبقاً في نظام جواميديك.';
       } else if (err.code === 'auth/weak-password') {
-        friendlyMessage = 'Security warning: Password must be at least 6 characters.';
+        friendlyMessage = 'تحذير أمني: يرجى كتابة كلمة مرور حماية قوية من 6 أحرف على الأقل.';
       } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || (err.message && err.message.includes('invalid-credential'))) {
-        friendlyMessage = 'Incorrect authentication credentials. Please check your email or password and try again.';
+        friendlyMessage = 'بيانات التحقق غير مطابقة للسجلات الطبية. يرجى إعادة مراجعة بريدك الإلكتروني أو كلمة المرور.';
       }
       setAuthError(friendlyMessage);
     } finally {
@@ -210,17 +216,18 @@ export default function ProfileModal({ isOpen, onClose, onOpenAdmin }: { isOpen:
     setAuthSuccess('');
     try {
       await signInWithGoogle();
-      setAuthSuccess('Google login successful!');
-      setTimeout(() => setAuthSuccess(''), 3000);
+      setAuthSuccess('تم تسجيل الدخول الآمن مع Google بنجاح!');
+      setTimeout(() => {
+        setAuthSuccess('');
+        onClose();
+      }, 1200);
     } catch (err: any) {
       console.error("Google SSO Failure:", err);
-      let friendly = err.message || 'Google authentication failed.';
+      let friendly = err.message || 'فشلت بوابة Google الأمنية.';
       if (err.code === 'auth/popup-blocked' || err.message?.includes('popup-blocked') || err.message?.includes('popup_blocked')) {
-        friendly = 'The login popup was blocked by your browser\'s security or because of sandboxing. Please allow popups for this page, or open the app in a new tab using the URL in the address bar.';
+        friendly = 'تم حظر نافذة التسجيل بواسطة المتصفح. يرجى السماح بالنوافذ المنبثقة لإتمام العملية.';
       } else if (err.code === 'auth/popup-closed-by-user' || err.message?.includes('popup-closed-by-user')) {
-        friendly = 'The login window was closed before authorization was complete. Please click Google Sign-In and complete the login process.';
-      } else if (err.code === 'auth/cancelled-popup-request' || err.message?.includes('cancelled-popup-request')) {
-        friendly = 'The authentication request was cancelled or replaced by a new popup request. Please try again.';
+        friendly = 'تم إلغاء النافذة المنبثقة من قبل المستخدم.';
       }
       setAuthError(friendly);
     }

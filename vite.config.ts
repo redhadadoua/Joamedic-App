@@ -13,6 +13,13 @@ export default defineConfig(() => {
     },
     build: {
       manifest: true,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'framer-motion', 'lucide-react', 'firebase/app', 'firebase/firestore', 'firebase/auth'],
+          },
+        },
+      },
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

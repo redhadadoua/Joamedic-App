@@ -34,9 +34,9 @@ interface CartContextType {
   setIsCheckoutOpen: (isOpen: boolean) => void;
   cartItems: CartItem[];
   addToCart: (product: Product, size?: string, personalization?: Personalization) => void;
-  removeFromCart: (id: number, size?: string, personalizationText?: string) => void;
-  updateQuantity: (id: number, quantity: number, size?: string, personalizationText?: string) => void;
-  updateSize: (id: number, size: string) => void;
+  removeFromCart: (id: number, size?: string, personalizationText?: string, color?: string) => void;
+  updateQuantity: (id: number, quantity: number, size?: string, personalizationText?: string, color?: string) => void;
+  updateSize: (id: number, size: string, oldSize?: string, color?: string) => void;
   clearCart: () => void;
   cartTotal: number;
   cartCount: number;
@@ -121,29 +121,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addToCart = (product: Product, size: string = 'M', personalization?: Personalization) => {
     setCartItems(prev => {
-      const existing = prev.find(item => item.id === product.id && item.size === size && item.personalization?.text === personalization?.text);
+      const existing = prev.find(item => item.id === product.id && item.size === size && item.color === product.color);
       if (existing) {
-        return prev.map(item => (item.id === product.id && item.size === size && item.personalization?.text === personalization?.text) ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map(item => (item.id === product.id && item.size === size && item.color === product.color) ? { ...item, quantity: item.quantity + 1 } : item);
       }
       return [...prev, { ...product, quantity: 1, size, personalization }];
     });
     setIsCartOpen(true);
   };
 
-  const removeFromCart = (id: number, size?: string, personalizationText?: string) => {
-    setCartItems(prev => prev.filter(item => !(item.id === id && item.size === size && item.personalization?.text === personalizationText)));
+  const removeFromCart = (id: number, size?: string, personalizationText?: string, color?: string) => {
+    setCartItems(prev => prev.filter(item => !(item.id === id && item.size === size && item.color === color)));
   };
 
-  const updateQuantity = (id: number, quantity: number, size?: string, personalizationText?: string) => {
+  const updateQuantity = (id: number, quantity: number, size?: string, personalizationText?: string, color?: string) => {
     if (quantity < 1) {
-      removeFromCart(id, size, personalizationText);
+      removeFromCart(id, size, undefined, color);
       return;
     }
-    setCartItems(prev => prev.map(item => (item.id === id && item.size === size && item.personalization?.text === personalizationText) ? { ...item, quantity } : item));
+    setCartItems(prev => prev.map(item => (item.id === id && item.size === size && item.color === color) ? { ...item, quantity } : item));
   };
 
-  const updateSize = (id: number, size: string) => {
-    setCartItems(prev => prev.map(item => item.id === id ? { ...item, size } : item));
+  const updateSize = (id: number, size: string, oldSize?: string, color?: string) => {
+    setCartItems(prev => prev.map(item => (item.id === id && item.size === oldSize && item.color === color) ? { ...item, size } : item));
   };
 
   const clearCart = () => {
