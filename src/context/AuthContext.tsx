@@ -64,8 +64,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       const docRef = doc(db, 'users', currentUser.uid);
-      const docSnap = await getDocFromServer(docRef).catch(() => getDoc(docRef));
-      if (docSnap.exists()) {
+      
+      // Let's read with up to 3 retries in case the connection or auth state is initializing
+      let docSnap = null;
+      let readAttempts = 0;
+      while (readAttempts < 3) {
+        try {
+          docSnap = await getDocFromServer(docRef).catch(() => getDoc(docRef));
+          break;
+        } catch (readErr) {
+          readAttempts++;
+          console.warn(`fetchUserProfile read attempt ${readAttempts} failed:`, readErr);
+          if (readAttempts >= 3) {
+            throw readErr;
+          }
+          await new Promise(resolve => setTimeout(resolve, 800));
+        }
+      }
+
+      if (docSnap && docSnap.exists()) {
         const data = docSnap.data() as UserProfile;
         if (currentUser.email === 'redhadadoua@gmail.com' && data.role !== 'admin') {
           data.role = 'admin';
@@ -91,19 +108,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         // Delay briefly for auth token propagation
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         let saved = false;
         let attempts = 0;
-        while (!saved && attempts < 3) {
+        while (!saved && attempts < 5) {
           try {
             await setDoc(docRef, newProfile);
             saved = true;
           } catch (dbErr) {
             attempts++;
             console.error(`fetchUserProfile retry ${attempts} failed to initialize user document:`, dbErr);
-            if (attempts >= 3) break;
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (attempts >= 5) break;
+            await new Promise(resolve => setTimeout(resolve, 1200));
           }
         }
 
@@ -118,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(newProfile));
       }
     } catch (error) {
-      console.warn('Firestore user doc fetch failed, continuing in offline mode:', error);
+      console.warn('Firestore user doc fetch failed, continuing in offline/temporary mode:', error);
       if (!localBackup) {
         setUserProfile({
           uid: currentUser.uid,
@@ -126,7 +143,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           displayName: currentUser.displayName || 'Medic Member',
           photoURL: currentUser.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=user`,
           phoneNumber: '',
-          phoneVerified: false
+          phoneVerified: false,
+          createdAt: new Date().toISOString(),
+          role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
         });
       }
     }
@@ -138,7 +157,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        await fetchUserProfile(currentUser);
+        // Only run fetchUserProfile automatically if this is a login or external auth change,
+        // rather than our active manual email/password signUp sequence which writes explicitly.
+        if (!signUpInProgressRef.current) {
+          await fetchUserProfile(currentUser);
+        }
       } else {
         setUserProfile(null);
       }
@@ -175,22 +198,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       // Propagation delay for security rules logic sync
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 1200));
 
       let written = false;
       let attempts = 0;
-      while (!written && attempts < 3) {
+      let lastErr = null;
+      while (!written && attempts < 5) {
         try {
           await setDoc(doc(db, 'users', currentUser.uid), profileData);
           written = true;
         } catch (dbErr) {
           attempts++;
+          lastErr = dbErr;
           console.error(`signUp write attempt ${attempts} failed:`, dbErr);
-          if (attempts >= 3) {
-            console.warn("Falling back to fetchUserProfile for storage sync.");
+          if (attempts >= 5) {
             break;
           }
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+
+      if (!written) {
+        console.warn("Retrying profile write in active fallback mode.");
+        try {
+          await setDoc(doc(db, 'users', currentUser.uid), profileData);
+        } catch (retryErr) {
+          console.error("Critical fallback write failed:", retryErr);
         }
       }
       

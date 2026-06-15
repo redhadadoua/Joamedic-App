@@ -25,7 +25,8 @@ import {
   Inbox,
   Upload,
   Image as ImageIcon,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -760,11 +761,11 @@ function OverviewTab() {
   const totalProductsCount = products.length;
   const registeredUsersCount = Math.max(users.length, 5); // Fallback to 5 to avoid empty view on local dev
 
-  const stats = [
-    { label: 'Total Revenue', value: `${totalRevenue.toLocaleString()} DA`, icon: DollarSign, trend: `from ${orders.length} orders` },
-    { label: 'Active Orders', value: String(activeOrdersCount), icon: ShoppingCart, trend: 'Needs shipping' },
-    { label: 'Total Products', value: String(totalProductsCount), icon: Package, trend: 'Dynamically served' },
-    { label: 'Registered Users', value: String(registeredUsersCount), icon: Users, trend: 'Customers count' }
+    const stats = [
+    { label: 'Total Revenue', value: `${totalRevenue.toLocaleString()} DA`, icon: DollarSign, trend: `from ${orders.length} orders`, color: 'from-green-500/20 to-emerald-500/5', iconColor: 'text-emerald-400' },
+    { label: 'Active Orders', value: String(activeOrdersCount), icon: ShoppingCart, trend: 'Needs shipping', color: 'from-blue-500/20 to-sky-500/5', iconColor: 'text-sky-400' },
+    { label: 'Total Products', value: String(totalProductsCount), icon: Package, trend: 'Dynamically served', color: 'from-purple-500/20 to-violet-500/5', iconColor: 'text-violet-400' },
+    { label: 'Registered Users', value: String(registeredUsersCount), icon: Users, trend: 'Customers count', color: 'from-orange-500/20 to-amber-500/5', iconColor: 'text-amber-400' }
   ];
 
   // Dynamic Recent Activity Log (Orders + Submissions + System updates)
@@ -772,7 +773,7 @@ function OverviewTab() {
   
   orders.slice(0, 3).forEach(ord => {
     recentActivities.push({
-      text: `Order #${ord.id} placed by ${ord.shippingInfo?.name || 'Customer'}`,
+      text: `Order #${ord.id || ''} placed by ${ord.shippingInfo?.name || 'Customer'}`,
       time: 'New Order',
       type: 'order'
     });
@@ -802,18 +803,18 @@ function OverviewTab() {
         {stats.map((stat, i) => {
           const Icon = stat.icon;
           return (
-            <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-6 relative overflow-hidden group">
+            <div key={i} className={`bg-gradient-to-br ${stat.color} border border-white/10 rounded-2xl p-6 relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300`}>
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110 duration-500"></div>
               <div className="flex justify-between items-start relative z-10">
                 <div>
-                  <p className="text-sm text-white/60 mb-2">{stat.label}</p>
-                  <h3 className="text-3xl font-display font-semibold">{stat.value}</h3>
+                  <p className="text-xs uppercase tracking-wider font-bold text-white/50 mb-2">{stat.label}</p>
+                  <h3 className="text-3xl font-display font-semibold text-white">{stat.value}</h3>
                 </div>
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/10">
-                  <Icon size={20} className="text-teal-400" />
+                <div className="w-12 h-12 rounded-xl bg-slate-900/50 flex items-center justify-center border border-white/10 shadow-inner backdrop-blur-sm">
+                  <Icon size={24} className={stat.iconColor} />
                 </div>
               </div>
-              <div className="mt-4 flex items-center gap-2 text-xs font-medium text-teal-400 relative z-10">
+              <div className={`mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider ${stat.iconColor} relative z-10`}>
                 <TrendingUp size={14} />
                 {stat.trend}
               </div>
@@ -2003,11 +2004,19 @@ function UsersManager() {
             <Plus size={14} /> Add User
           </button>
           <button
+            onClick={fetchUsers}
+            disabled={loading}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 px-4 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider disabled:opacity-50"
+            title="Force synchronization with server"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Sync
+          </button>
+          <button
             onClick={handleSeedUsersAndOrders}
             disabled={seeding}
             className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 bg-white/10 border border-white/10 hover:bg-white/20 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all uppercase tracking-wider disabled:opacity-50"
           >
-            {seeding ? 'Seeding...' : 'Seed Test Users'}
+            {seeding ? 'Seeding...' : 'Seed Data'}
           </button>
         </div>
       </div>
@@ -2125,7 +2134,7 @@ function UsersManager() {
                   <div className="flex items-center gap-4 text-[10px] text-white/30 font-mono">
                     {u.phoneNumber && <span>Phone: {u.phoneNumber}</span>}
                     {u.createdAt && (
-                      <span>Born: {typeof u.createdAt === 'string' ? u.createdAt.substring(0, 10) : 'N/A'}</span>
+                      <span>Registered: {typeof u.createdAt === 'string' ? u.createdAt.substring(0, 10) : 'N/A'}</span>
                     )}
                   </div>
                 </div>
