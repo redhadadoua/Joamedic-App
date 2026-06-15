@@ -120,7 +120,7 @@ export default function GoogleSheetsManager() {
           }
         }
       } catch (err) {
-        console.error('Error fetching Google Sheets configuration:', err);
+        console.warn('Error fetching Google Sheets configuration:', err);
       } finally {
         setLoadingConfig(false);
       }
