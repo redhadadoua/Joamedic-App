@@ -1920,13 +1920,8 @@ function SettingsManager() {
               <div className="flex gap-4 items-center h-[46px] pl-2">
                 <button 
                   onClick={() => setStoreConfig({...storeConfig, theme: 'emerald'})}
-                  className={`w-8 h-8 rounded-full bg-emerald-700 hover:scale-110 transition-transform ${storeConfig.theme === 'emerald' ? 'border-2 border-white ring-2 ring-emerald-500' : 'border border-white/20'}`}
+                  className="w-8 h-8 rounded-full bg-emerald-700 border-2 border-white ring-2 ring-emerald-500"
                   title="Clinical Emerald Theme"
-                ></button>
-                <button 
-                  onClick={() => setStoreConfig({...storeConfig, theme: 'midnight'})}
-                  className={`w-8 h-8 rounded-full bg-slate-700 hover:scale-110 transition-transform ${storeConfig.theme === 'midnight' ? 'border-2 border-white ring-2 ring-blue-500' : 'border border-white/20'}`}
-                  title="Slate Theme"
                 ></button>
               </div>
             </div>

@@ -36,7 +36,7 @@ function AppContent() {
   const { isAdmin } = useAuth();
   const [isOrderStatusOpen, setIsOrderStatusOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [theme, setTheme] = useState<'emerald' | 'midnight'>('emerald');
+  const theme = 'emerald';
   const [isAdminMode, setIsAdminMode] = useState(false);
 
   // Hidden admin shortcut: Ctrl+Shift+A (only triggers if the logged-in user is actually an admin)
@@ -62,7 +62,7 @@ function AppContent() {
   }
 
   return (
-    <div className={`relative min-h-screen selection:bg-teal-500/30 selection:text-white transition-colors duration-1000 ${theme === 'emerald' ? 'bg-emerald-950' : 'bg-slate-950'}`}>
+    <div className="relative min-h-screen selection:bg-teal-500/30 selection:text-white">
       <ScrollProgress />
       <CartDrawer />
       <OrderStatusModal isOpen={isOrderStatusOpen} onClose={() => setIsOrderStatusOpen(false)} />
@@ -76,13 +76,13 @@ function AppContent() {
       {/* Background Liquid Glass Blobs/Gradients */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         {/* Top left blob */}
-        <div className={`blob w-[600px] h-[600px] -top-[200px] -left-[200px] transition-colors duration-1000 ${theme === 'emerald' ? 'bg-teal-600/20' : 'bg-blue-600/20'}`}></div>
+        <div className="blob w-[600px] h-[600px] -top-[200px] -left-[200px] bg-teal-600/20"></div>
         {/* Top right blob */}
-        <div className={`blob w-[800px] h-[800px] -top-[300px] -right-[200px] transition-colors duration-1000 ${theme === 'emerald' ? 'bg-emerald-500/20' : 'bg-indigo-500/20'}`} style={{ animationDelay: '-5s' }}></div>
+        <div className="blob w-[800px] h-[800px] -top-[300px] -right-[200px] bg-emerald-500/20" style={{ animationDelay: '-5s' }}></div>
         {/* Bottom right blob */}
-        <div className={`blob w-[700px] h-[700px] top-[40%] -right-[300px] transition-colors duration-1000 ${theme === 'emerald' ? 'bg-blue-600/10' : 'bg-violet-600/10'}`} style={{ animationDelay: '-10s' }}></div>
+        <div className="blob w-[700px] h-[700px] top-[40%] -right-[300px] bg-teal-500/10" style={{ animationDelay: '-10s' }}></div>
         {/* Center left glow */}
-        <div className={`blob w-[500px] h-[500px] top-[60%] -left-[200px] transition-colors duration-1000 ${theme === 'emerald' ? 'bg-yellow-500/5' : 'bg-sky-500/10'}`} style={{ animationDelay: '-15s' }}></div>
+        <div className="blob w-[500px] h-[500px] top-[60%] -left-[200px] bg-emerald-400/5" style={{ animationDelay: '-15s' }}></div>
         {/* Global heavy grain overlay to give that premium matte texture under glass */}
         <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
       </div>
@@ -103,7 +103,7 @@ function AppContent() {
         </Suspense>
       </main>
 
-      <Footer onOpenOrderStatus={() => setIsOrderStatusOpen(true)} theme={theme} setTheme={setTheme} />
+      <Footer onOpenOrderStatus={() => setIsOrderStatusOpen(true)} theme={theme} />
       <BackToTop />
     </div>
   );

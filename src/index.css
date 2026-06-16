@@ -42,24 +42,26 @@
 }
 
 body {
-  @apply bg-emerald-950 text-white overflow-x-hidden antialiased;
+  background: radial-gradient(circle at 50% 0%, #033d30 0%, #02251d 50%, #011410 100%);
+  @apply text-white overflow-x-hidden antialiased;
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(2, 44, 34, 1); /* emerald-950 */
+  background: #011410;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(45, 212, 191, 0.2); /* teal-400 */
-  border-radius: 5px;
+  background: rgba(45, 212, 191, 0.25); /* teal-400 */
+  border-radius: 999px;
+  border: 2px solid #011410;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(45, 212, 191, 0.4);
+  background: rgba(45, 212, 191, 0.55);
 }
 
 html[dir="rtl"] body,

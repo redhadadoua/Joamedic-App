@@ -22,6 +22,7 @@ export default function Contact() {
     try {
       await addDoc(collection(db, 'contacts'), {
         ...formData,
+        recipientEmail: 'joamedicsupport@gmail.com',
         createdAt: serverTimestamp()
       });
       setStatus('success');
@@ -74,7 +75,7 @@ export default function Contact() {
               </div>
               <h3 className="text-xl font-display font-semibold text-white mb-2">Email</h3>
               <p className="text-white/60 text-sm mb-1">Our friendly team is here to help.</p>
-              <a href="mailto:support@joamedic.dz" className="text-teal-300 hover:text-teal-200 transition-colors">support@joamedic.dz</a>
+              <a href="mailto:joamedicsupport@gmail.com" className="text-teal-300 hover:text-teal-200 transition-colors">joamedicsupport@gmail.com</a>
             </div>
 
             <div>
