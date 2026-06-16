@@ -1,4 +1,3 @@
-import { motion } from 'motion/react';
 import { ArrowRight, Activity, Droplet } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import heroImg1 from '../assets/images/sami sdqc.jpg';
@@ -11,11 +10,9 @@ export default function Hero() {
       <div className="max-w-7xl mx-auto w-full grid lg:grid-cols-2 gap-12 lg:gap-8 items-center z-10">
         
         {/* Left Content */}
-        <motion.div 
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="flex flex-col gap-6"
+        <div 
+          className="flex flex-col gap-6 animate-slide-up opacity-0"
+          style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-panel w-fit border-teal-400/30">
             <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse"></span>
@@ -54,37 +51,32 @@ export default function Hero() {
               {t('hero.btn.story')}
             </button>
           </div>
-        </motion.div>
+        </div>
 
         {/* Right Content - Visual Showcase */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1, delay: 0.4 }}
-          className="relative h-[600px] w-full lg:ml-auto max-w-lg"
+        <div 
+          className="relative h-[600px] w-full lg:ml-auto max-w-lg animate-scale-in opacity-0"
+          style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}
         >
           {/* Main Glass Container for Image */}
           <div className="absolute inset-0 glass-panel rounded-3xl overflow-hidden p-2">
             <div className="relative w-full h-full rounded-2xl overflow-hidden bg-slate-950/10">
-              <motion.img 
+              <img 
                 src={heroImg1} 
                 alt="Premium Surgeon Scrubs" 
                 referrerPolicy="no-referrer"
                 fetchPriority="high"
-                initial={{ opacity: 0, scale: 1.05 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 1.0, ease: [0.4, 0, 0.2, 1] }}
-                className="absolute inset-0 object-cover w-full h-full"
+                loading="eager"
+                decoding="async"
+                className="absolute inset-0 object-cover w-full h-full animate-scale-in"
               />
             </div>
           </div>
 
           {/* Floating Feature Node 1 */}
-          <motion.div 
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 1, duration: 0.5 }}
-            className="absolute top-12 -left-6 glass-card p-4 flex items-center gap-3 w-48"
+          <div 
+            className="absolute top-12 -left-6 glass-card p-4 flex items-center gap-3 w-48 animate-slide-up opacity-0"
+            style={{ animationDelay: '1s', animationFillMode: 'forwards' }}
           >
             <div className="p-2 rounded-full bg-teal-400/20 border border-teal-400/30 text-teal-300">
               <Activity size={20} />
@@ -93,14 +85,12 @@ export default function Hero() {
               <p className="text-sm font-semibold text-white">{t('hero.feature1.title')}</p>
               <p className="text-xs text-white/60">{t('hero.feature1.desc')}</p>
             </div>
-          </motion.div>
+          </div>
 
           {/* Floating Feature Node 2 */}
-          <motion.div 
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 1.2, duration: 0.5 }}
-            className="absolute bottom-24 -right-8 glass-card p-4 flex items-center gap-3 w-52"
+          <div 
+            className="absolute bottom-24 -right-8 glass-card p-4 flex items-center gap-3 w-52 animate-slide-up opacity-0"
+            style={{ animationDelay: '1.2s', animationFillMode: 'forwards' }}
           >
             <div className="p-2 rounded-full bg-blue-400/20 border border-blue-400/30 text-blue-300">
               <Droplet size={20} />
@@ -109,8 +99,8 @@ export default function Hero() {
               <p className="text-sm font-semibold text-white">{t('hero.feature2.title')}</p>
               <p className="text-xs text-white/60">{t('hero.feature2.desc')}</p>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
       </div>
     </section>

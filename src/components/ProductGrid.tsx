@@ -1,4 +1,3 @@
-import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingCart, CheckCircle2, Ruler } from 'lucide-react';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -29,6 +28,8 @@ const ProductImageZoom = ({ image, name }: { image: string, name: string }) => {
         src={image} 
         alt={name} 
         referrerPolicy="no-referrer"
+        loading="lazy"
+        decoding="async"
         className="w-full h-full object-cover transition-transform duration-200 ease-out"
         style={{
           transformOrigin: `${zoomPos.x} ${zoomPos.y}`,
@@ -96,7 +97,7 @@ export default function ProductGrid() {
                       : 'border-white/10 hover:border-white/30'
                   }`}
                 >
-                  <img src={opt.image} alt={opt.nameAr} className="w-full h-full object-cover opacity-80" />
+                  <img src={opt.image} alt={opt.nameAr} loading="lazy" decoding="async" className="w-full h-full object-cover opacity-80" />
                 </button>
               );
             })}

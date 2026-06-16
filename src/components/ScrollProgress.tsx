@@ -1,18 +1,34 @@
-import { motion, useScroll, useSpring } from 'motion/react';
+import { useEffect, useState } from 'react';
 
 export default function ScrollProgress() {
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, {
-    stiffness: 100,
-    damping: 30,
-    restDelta: 0.001
-  });
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    let ticking = false;
+
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const totalScroll = document.documentElement.scrollTop;
+          const windowHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+          const scroll = `${(totalScroll / windowHeight) * 100}%`;
+          
+          setProgress(Number((totalScroll / windowHeight) * 100));
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
-    <motion.div
-      className="fixed top-0 left-0 right-0 h-1 z-[100] bg-gradient-to-r from-teal-400 via-teal-300 to-emerald-300 origin-left opacity-90"
+    <div
+      className="fixed top-0 left-0 h-1 z-[100] bg-gradient-to-r from-teal-400 via-teal-300 to-emerald-300 origin-left opacity-90 transition-transform duration-100 ease-out"
       style={{ 
-        scaleX,
+        width: `${progress}%`,
         boxShadow: '0 0 12px 2px rgba(45, 212, 191, 0.6), 0 0 24px rgba(45, 212, 191, 0.4)'
       }}
     />

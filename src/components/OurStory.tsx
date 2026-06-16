@@ -1,33 +1,22 @@
-import { motion, useScroll, useTransform } from 'motion/react';
-import { useRef } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import storyImg from '../assets/images/DSC_0615 copie.jpg';
 
 export default function OurStory() {
   const { t } = useLanguage();
-  const containerRef = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start end", "end start"]
-  });
-
-  const y = useTransform(scrollYProgress, [0, 1], [100, -100]);
-  const opacity = useTransform(scrollYProgress, [0, 0.3, 0.7, 1], [0, 1, 1, 0]);
 
   return (
-    <section ref={containerRef} id="our-story" className="py-32 px-6 relative z-10 w-full max-w-7xl mx-auto overflow-hidden">
+    <section id="our-story" className="py-32 px-6 relative z-10 w-full max-w-7xl mx-auto overflow-hidden">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
         
         {/* Images Column */}
-        <motion.div 
-          style={{ y, opacity }}
-          className="relative h-[600px] rounded-3xl overflow-hidden glass-panel border border-white/10"
-        >
+        <div className="relative h-[600px] rounded-3xl overflow-hidden glass-panel border border-white/10 animate-fade-in opacity-0" style={{ animationFillMode: 'forwards' }}>
           <div className="absolute inset-0 bg-emerald-900/20 mix-blend-overlay z-10"></div>
           <img 
             src={storyImg} 
             alt="Healthcare professionals" 
             referrerPolicy="no-referrer"
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent z-20"></div>
@@ -39,16 +28,11 @@ export default function OurStory() {
             </div>
             <p className="text-white font-mono text-sm tracking-widest uppercase">Est. 2024</p>
           </div>
-        </motion.div>
+        </div>
 
         {/* Text Column */}
         <div className="flex flex-col justify-center">
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.7 }}
-          >
+          <div className="animate-slide-up opacity-0" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
             <div className="flex items-center gap-4 mb-4">
               <div className="h-[1px] w-12 bg-teal-400"></div>
               <span className="text-teal-400 uppercase tracking-widest text-sm font-semibold">{t('story.tag')}</span>
@@ -65,7 +49,7 @@ export default function OurStory() {
                 {t('story.desc2')}
               </p>
             </div>
-          </motion.div>
+          </div>
         </div>
 
       </div>

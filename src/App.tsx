@@ -5,15 +5,8 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
-import Footer from './components/Footer';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { CartProvider } from './context/CartContext';
-import CartDrawer from './components/CartDrawer';
-import ScrollProgress from './components/ScrollProgress';
-import OrderStatusModal from './components/OrderStatusModal';
-import CheckoutModal from './components/CheckoutModal';
-import BackToTop from './components/BackToTop';
-import ProfileModal from './components/ProfileModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProductsProvider } from './context/ProductsContext';
 import { Loader } from 'lucide-react';
@@ -23,6 +16,13 @@ const FabricTech = lazy(() => import('./components/FabricTech'));
 const OurStory = lazy(() => import('./components/OurStory'));
 const Contact = lazy(() => import('./components/Contact'));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
+const Footer = lazy(() => import('./components/Footer'));
+const CartDrawer = lazy(() => import('./components/CartDrawer'));
+const ScrollProgress = lazy(() => import('./components/ScrollProgress'));
+const OrderStatusModal = lazy(() => import('./components/OrderStatusModal'));
+const CheckoutModal = lazy(() => import('./components/CheckoutModal'));
+const BackToTop = lazy(() => import('./components/BackToTop'));
+const ProfileModal = lazy(() => import('./components/ProfileModal'));
 
 // Modern, sleek loading fallback
 const PageLoader = () => (
@@ -63,15 +63,17 @@ function AppContent() {
 
   return (
     <div className="relative min-h-screen selection:bg-teal-500/30 selection:text-white">
-      <ScrollProgress />
-      <CartDrawer />
-      <OrderStatusModal isOpen={isOrderStatusOpen} onClose={() => setIsOrderStatusOpen(false)} />
-      <CheckoutModal />
-      <ProfileModal 
-        isOpen={isProfileOpen} 
-        onClose={() => setIsProfileOpen(false)} 
-        onOpenAdmin={isAdmin ? () => setIsAdminMode(true) : undefined} 
-      />
+      <Suspense fallback={null}>
+        <ScrollProgress />
+        <CartDrawer />
+        <OrderStatusModal isOpen={isOrderStatusOpen} onClose={() => setIsOrderStatusOpen(false)} />
+        <CheckoutModal />
+        <ProfileModal 
+          isOpen={isProfileOpen} 
+          onClose={() => setIsProfileOpen(false)} 
+          onOpenAdmin={isAdmin ? () => setIsAdminMode(true) : undefined} 
+        />
+      </Suspense>
       
       {/* Background Liquid Glass Blobs/Gradients */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
@@ -103,8 +105,10 @@ function AppContent() {
         </Suspense>
       </main>
 
-      <Footer onOpenOrderStatus={() => setIsOrderStatusOpen(true)} theme={theme} />
-      <BackToTop />
+      <Suspense fallback={<PageLoader />}>
+        <Footer onOpenOrderStatus={() => setIsOrderStatusOpen(true)} theme={theme} />
+        <BackToTop />
+      </Suspense>
     </div>
   );
 }
