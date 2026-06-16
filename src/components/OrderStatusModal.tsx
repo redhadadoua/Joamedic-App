@@ -2,8 +2,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Package, Search, Truck, CheckCircle2, FileDown } from 'lucide-react';
 import React, { useState, useRef } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -144,6 +142,13 @@ export default function OrderStatusModal({ isOpen, onClose }: OrderStatusModalPr
   const exportPDF = async () => {
     if (!invoiceRef.current) return;
     
+    // Lazy load heavy PDF/Canvas dependencies to reduce bundle size
+    const mHtml2canvas = await import('html2canvas');
+    const html2canvas = mHtml2canvas.default || mHtml2canvas;
+    
+    const mJsPDF = await import('jspdf');
+    const jsPDF = mJsPDF.default || mJsPDF;
+
     const element = invoiceRef.current;
     
     try {

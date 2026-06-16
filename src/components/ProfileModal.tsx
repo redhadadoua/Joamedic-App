@@ -9,7 +9,6 @@ import { useAuth, UserProfile } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, getDocsFromCache, orderBy } from 'firebase/firestore';
 import { useLanguage } from '../i18n/LanguageContext';
-import firebaseConfig from '../../firebase-applet-config.json';
 
 export default function ProfileModal({ isOpen, onClose, onOpenAdmin }: { isOpen: boolean, onClose: () => void, onOpenAdmin?: () => void }) {
   const { user, userProfile, signUp, signIn, updateUserProfile, signInWithGoogle, logout } = useAuth();
@@ -412,7 +411,7 @@ export default function ProfileModal({ isOpen, onClose, onOpenAdmin }: { isOpen:
                       <div>
                         1. Open the {" "}
                         <a 
-                          href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/providers`} 
+                          href={`https://console.firebase.google.com/project/${import.meta.env.VITE_FIREBASE_PROJECT_ID}/authentication/providers`} 
                           target="_blank" 
                           rel="noopener noreferrer" 
                           className="text-teal-400 hover:text-teal-300 font-bold underline inline-flex items-center gap-0.5"

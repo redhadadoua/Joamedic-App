@@ -84,11 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (docSnap && docSnap.exists()) {
         const data = docSnap.data() as UserProfile;
-        if (currentUser.email === 'redhadadoua@gmail.com' && data.role !== 'admin') {
-          data.role = 'admin';
-          try {
-            await setDoc(docRef, { role: 'admin' }, { merge: true });
-          } catch (_) {}
+        if (data.role !== 'admin') {
+          // Admin role is managed in Firestore solely now
         }
         setUserProfile(data);
         localStorage.setItem(`profile_${currentUser.uid}`, JSON.stringify(data));
@@ -104,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           phoneNumber: pendingPhoneNumber || '',
           phoneVerified: false,
           createdAt: new Date().toISOString(),
-          role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
+          role: 'user'
         };
 
         // Delay briefly for auth token propagation
@@ -145,7 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           phoneNumber: '',
           phoneVerified: false,
           createdAt: new Date().toISOString(),
-          role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
+          role: 'user'
         });
       }
     }
@@ -194,7 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         phoneVerified: false,
         photoURL: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(displayName)}`,
         createdAt: new Date().toISOString(),
-        role: currentUser.email === 'redhadadoua@gmail.com' ? 'admin' : 'user'
+        role: 'user'
       };
 
       // Propagation delay for security rules logic sync
@@ -286,7 +283,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserProfile(null);
   };
 
-  const isAdmin = !!(user && (user.email === 'redhadadoua@gmail.com' || userProfile?.role === 'admin'));
+  const isAdmin = !!(userProfile?.role === 'admin');
 
   return (
     <AuthContext.Provider value={{ user, userProfile, loading, signUp, signIn, updateUserProfile, signInWithGoogle, logout, isAdmin }}>

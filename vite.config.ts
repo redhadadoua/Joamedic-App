@@ -13,11 +13,11 @@ export default defineConfig(() => {
     },
     build: {
       manifest: true,
-      sourcemap: true,
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom', 'framer-motion', 'lucide-react', 'firebase/app', 'firebase/firestore', 'firebase/auth'],
+            vendor: ['react', 'react-dom', 'motion', 'lucide-react', 'firebase/app', 'firebase/firestore', 'firebase/auth'],
           },
         },
       },

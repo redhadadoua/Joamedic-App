@@ -50,7 +50,7 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 // Standalone explicit multi-step connection verification function to verify internet, Db, and Sheets
-export const verifyConnection = async (
+const verifyConnection = async (
   webAppUrl: string,
   onProgress?: (step: string, feedbackMessage?: string) => void
 ): Promise<{ firestore: boolean; sheets: boolean; internet: boolean }> => {

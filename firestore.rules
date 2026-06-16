@@ -18,7 +18,8 @@ service cloud.firestore {
     function existing() { return resource.data; }
     function isSignedIn() { return request.auth != null; }
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == 'redhadadoua@gmail.com';
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isValidUser(data) {
@@ -26,10 +27,14 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || request.auth.token.email == 'redhadadoua@gmail.com');
-      allow list: if isSignedIn() && (request.auth.token.email == 'redhadadoua@gmail.com');
-      allow create, update: if isSignedIn() && (request.auth.uid == userId || request.auth.token.email == 'redhadadoua@gmail.com');
-      allow delete: if isSignedIn() && (request.auth.token.email == 'redhadadoua@gmail.com');
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId && (incoming().role == 'user' || incoming().role == null);
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (request.auth.uid == userId && (incoming().role == existing().role || incoming().role == null))
+      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     function isValidProduct(data) {
