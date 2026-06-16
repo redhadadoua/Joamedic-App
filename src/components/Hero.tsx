@@ -22,15 +22,12 @@ export default function Hero() {
             <span className="text-xs font-medium text-teal-300 tracking-wider uppercase">{t('hero.tag')}</span>
           </div>
           
-          <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold leading-[1.1] tracking-tight">
-            {t('hero.title1')}
+          <h1 className="font-display text-5xl md:text-6xl lg:text-7xl font-bold leading-tight tracking-tight">
+            <span className="block pb-2">{t('hero.title1')}</span>
             {t('hero.title2') && (
-              <>
-                <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-white to-teal-100 text-glow">
-                  {t('hero.title2')}
-                </span>
-              </>
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-white to-teal-100 text-glow py-2 mt-2 md:mt-0">
+                {t('hero.title2')}
+              </span>
             )}
           </h1>
           

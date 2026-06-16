@@ -50,6 +50,10 @@ import {
   Line
 } from 'recharts';
 
+export const showAdminToast = (message: string, type: 'system' | 'error' = 'system') => {
+  window.dispatchEvent(new CustomEvent('admin-toast', { detail: { message, type } }));
+};
+
 export default function AdminDashboard({ onExit }: { onExit: () => void }) {
   const { user, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
@@ -57,17 +61,32 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
 
   interface RealTimeToast {
     id: string;
-    orderId: string;
-    customerName: string;
-    total: number;
-    itemsCount: number;
+    type: 'order' | 'system' | 'error';
+    orderId?: string;
+    customerName?: string;
+    total?: number;
+    itemsCount?: number;
     createdAt: Date;
+    message?: string;
   }
   const [toasts, setToasts] = useState<RealTimeToast[]>([]);
 
   const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
+
+  useEffect(() => {
+    const handleSystemToast = (e: any) => {
+      setToasts(prev => [{
+        id: Date.now() + Math.random().toString(),
+        type: e.detail.type || 'system',
+        message: e.detail.message,
+        createdAt: new Date()
+      }, ...prev]);
+    };
+    window.addEventListener('admin-toast', handleSystemToast);
+    return () => window.removeEventListener('admin-toast', handleSystemToast);
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -87,6 +106,7 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
 
             const newToast: RealTimeToast = {
               id: orderId + '-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+              type: 'order',
               orderId,
               customerName,
               total,
@@ -272,42 +292,67 @@ export default function AdminDashboard({ onExit }: { onExit: () => void }) {
               initial={{ opacity: 0, y: 50, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
-              className="bg-slate-900/95 border border-teal-500/30 text-white rounded-2xl p-4 shadow-[0_0_25px_rgba(20,184,166,0.15)] flex gap-3 pointer-events-auto backdrop-blur-md relative overflow-hidden"
+              className={`bg-slate-900/95 border text-white rounded-2xl p-4 flex gap-3 pointer-events-auto backdrop-blur-md relative overflow-hidden ${
+                toast.type === 'error' ? 'border-red-500/30 shadow-[0_0_25px_rgba(239,68,68,0.15)]' : 
+                toast.type === 'system' ? 'border-blue-500/30 shadow-[0_0_25px_rgba(59,130,246,0.15)]' : 
+                'border-teal-500/30 shadow-[0_0_25px_rgba(20,184,166,0.15)]'
+              }`}
             >
               {/* Pulsing visual alert line */}
-              <div className="absolute top-0 left-0 bottom-0 w-1 bg-gradient-to-b from-teal-400 to-sky-500"></div>
+              <div className={`absolute top-0 left-0 bottom-0 w-1 bg-gradient-to-b ${
+                toast.type === 'error' ? 'from-red-400 to-rose-500' :
+                toast.type === 'system' ? 'from-blue-400 to-indigo-500' :
+                'from-teal-400 to-sky-500'
+              }`}></div>
               
-              <div className="w-9 h-9 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
-                <ShoppingCart size={18} className="animate-bounce" />
+              <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                toast.type === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' :
+                toast.type === 'system' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' :
+                'bg-teal-500/10 border-teal-500/20 text-teal-400'
+              }`}>
+                {toast.type === 'order' ? <ShoppingCart size={18} className="animate-bounce" /> :
+                 toast.type === 'error' ? <XCircle size={18} /> :
+                 <CheckCircle2 size={18} />}
               </div>
 
               <div className="flex-1 min-w-0 pr-4">
-                <p className="text-xs uppercase font-bold tracking-wider text-teal-400">New Order Placed!</p>
-                <p className="text-[10px] text-white/50 font-mono mt-0.5 font-medium truncate">ID: {toast.orderId}</p>
-                <p className="text-xs font-semibold text-white mt-1 truncate">{toast.customerName}</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-[10px] bg-sky-500/15 text-sky-300 font-bold px-1.5 py-0.5 rounded uppercase">{toast.total.toLocaleString()} DA</span>
-                  <span className="text-[10px] bg-white/5 text-white/40 px-1.5 py-0.5 rounded font-mono">{toast.itemsCount} Pcs</span>
-                </div>
+                {toast.type === 'order' ? (
+                  <>
+                    <p className="text-xs uppercase font-bold tracking-wider text-teal-400">New Order Placed!</p>
+                    <p className="text-[10px] text-white/50 font-mono mt-0.5 font-medium truncate">ID: {toast.orderId}</p>
+                    <p className="text-xs font-semibold text-white mt-1 truncate">{toast.customerName}</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[10px] bg-sky-500/15 text-sky-300 font-bold px-1.5 py-0.5 rounded uppercase">{toast.total?.toLocaleString()} DA</span>
+                      <span className="text-[10px] bg-white/5 text-white/40 px-1.5 py-0.5 rounded font-mono">{toast.itemsCount} Pcs</span>
+                    </div>
 
-                <div className="flex gap-2 mt-3 text-[11px] font-bold">
-                  <button
-                    onClick={() => {
-                      setSelectedOrderId(toast.orderId);
-                      setActiveTab('orders');
-                      dismissToast(toast.id);
-                    }}
-                    className="px-3 py-1.5 bg-teal-500 text-black rounded-lg hover:bg-teal-400 transition-colors uppercase tracking-wider"
-                  >
-                    View Details
-                  </button>
-                  <button
-                    onClick={() => dismissToast(toast.id)}
-                    className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white rounded-lg transition-colors uppercase tracking-wider border border-white/5"
-                  >
-                    Dismiss
-                  </button>
-                </div>
+                    <div className="flex gap-2 mt-3 text-[11px] font-bold">
+                      <button
+                        onClick={() => {
+                          setSelectedOrderId(toast.orderId || null);
+                          setActiveTab('orders');
+                          dismissToast(toast.id);
+                        }}
+                        className="px-3 py-1.5 bg-teal-500 text-black rounded-lg hover:bg-teal-400 transition-colors uppercase tracking-wider"
+                      >
+                        View Details
+                      </button>
+                      <button
+                        onClick={() => dismissToast(toast.id)}
+                        className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white rounded-lg transition-colors uppercase tracking-wider border border-white/5"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-xs uppercase font-bold tracking-wider ${toast.type === 'error' ? 'text-red-400' : 'text-blue-400'}`}>
+                      {toast.type === 'error' ? 'Error' : 'System Notification'}
+                    </p>
+                    <p className="text-sm font-medium text-white/90 mt-1.5 leading-snug">{toast.message}</p>
+                  </>
+                )}
               </div>
 
               {/* Close helper button */}
@@ -990,8 +1035,13 @@ function ProductsManager() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader className="text-teal-400 animate-spin" size={32} />
+        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden p-6 space-y-4">
+          <div className="h-4 w-1/4 bg-white/5 rounded animate-pulse"></div>
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-12 w-full bg-white/5 rounded-xl animate-pulse"></div>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
@@ -1629,8 +1679,13 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader className="text-teal-400 animate-spin" size={32} />
+        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden p-6 space-y-4">
+          <div className="h-4 w-1/4 bg-white/5 rounded animate-pulse"></div>
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-12 w-full bg-white/5 rounded-xl animate-pulse"></div>
+            ))}
+          </div>
         </div>
       ) : orders.length === 0 ? (
         <div className="bg-white/5 border border-white/10 rounded-2xl p-12 text-center text-white/40 flex flex-col items-center justify-center gap-4">
@@ -1644,9 +1699,9 @@ function OrdersManager({ initialSearch = '', onClearInitialSearch }: { initialSe
               try {
                 setLoading(true);
                 await seedStoreDemoData(() => {});
-                alert("Clinical database seeded successfully! Real orders are now saved in Firestore.");
+                showAdminToast("Clinical database seeded successfully! Mock records are now saved.", "system");
               } catch (e) {
-                alert("Error seeding registry: " + (e instanceof Error ? e.message : String(e)));
+                showAdminToast("Error seeding registry: " + (e instanceof Error ? e.message : String(e)), "error");
               } finally {
                 setLoading(false);
               }
@@ -1840,7 +1895,7 @@ function SettingsManager() {
       setTimeout(() => setSuccessBanner(false), 4000);
     } catch (err) {
       console.error('Error writing settings to Firestore: ', err);
-      alert('Error updating custom configurator rules.');
+      showAdminToast('Error updating custom configurator rules.', 'error');
     } finally {
       setSaving(false);
     }
@@ -1869,10 +1924,10 @@ function SettingsManager() {
         await setDoc(docRef, p);
       }
       
-      alert("Joamedic product database forcefully cataloged and re-synced inside high-performance Firestore cache!");
+      showAdminToast("Joamedic product database forcefully cataloged and re-synced successfully!", "system");
     } catch (err: any) {
       console.error('Core catalog rebuild failed: ', err);
-      alert('Failed re-cataloging: ' + (err?.message || String(err)));
+      showAdminToast('Failed re-cataloging: ' + (err?.message || String(err)), 'error');
     } finally {
       setResettingCatalog(false);
     }

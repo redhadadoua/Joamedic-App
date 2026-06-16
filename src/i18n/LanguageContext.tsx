@@ -78,7 +78,7 @@ const translations: Record<Language, Record<string, string>> = {
     'foot.desc': 'الارتقاء بتجربة محترفي الرعاية الصحية من خلال جودة لا تضاهى، هندسة نسيج متقدمة، وتصميم أنيق خالد.',
     'foot.shop': 'تسوق',
     'foot.company': 'الشركة',
-    'foot.newsletter.title': 'كن على إطلاع',
+    'foot.newsletter.title': 'كن على اِطلاع',
     'foot.newsletter.desc': 'اشترك للحصول على وصول مبكر للمجموعات الجديدة ورؤى حصرية في الرعاية الصحية.',
     'foot.newsletter.placeholder': 'البريد الإلكتروني',
     'foot.rights': 'أزياء جوامديك الراقية. جميع الحقوق محفوظة.',
