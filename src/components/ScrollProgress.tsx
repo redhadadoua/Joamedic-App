@@ -26,9 +26,10 @@ export default function ScrollProgress() {
 
   return (
     <div
-      className="fixed top-0 left-0 h-1 z-[100] bg-gradient-to-r from-teal-400 via-teal-300 to-emerald-300 origin-left opacity-90 transition-transform duration-100 ease-out"
+      className="fixed top-0 left-0 w-full h-1 z-[100] bg-gradient-to-r from-teal-400 via-teal-300 to-emerald-300 origin-left opacity-90"
       style={{ 
-        width: `${progress}%`,
+        transform: `scaleX(${progress / 100})`,
+        willChange: 'transform',
         boxShadow: '0 0 12px 2px rgba(45, 212, 191, 0.6), 0 0 24px rgba(45, 212, 191, 0.4)'
       }}
     />

@@ -9,12 +9,33 @@ const ProductImageZoom = ({ image, name }: { image: string, name: string }) => {
   const [isZooming, setIsZooming] = useState(false);
   const [zoomPos, setZoomPos] = useState({ x: '50%', y: '50%' });
 
+  const requestRef = React.useRef<number>();
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - left) / width) * 100;
-    const y = ((e.clientY - top) / height) * 100;
-    setZoomPos({ x: `${x}%`, y: `${y}%` });
+    // Only calculate position once per frame to prevent reflow bottlenecks
+    if (requestRef.current) return;
+    
+    // Copy event values since React reuses the synthetic event object (in older React versions) or for closure safety
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    const target = e.currentTarget;
+
+    requestRef.current = requestAnimationFrame(() => {
+      const { left, top, width, height } = target.getBoundingClientRect();
+      const x = ((clientX - left) / width) * 100;
+      const y = ((clientY - top) / height) * 100;
+      setZoomPos({ x: `${x}%`, y: `${y}%` });
+      requestRef.current = undefined;
+    });
   };
+
+  React.useEffect(() => {
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div 
@@ -91,6 +112,7 @@ export default function ProductGrid() {
                 <button
                   key={opt.name}
                   onClick={() => selectColor(opt)}
+                  aria-label={`Select color ${opt.nameAr}`}
                   className={`relative aspect-square rounded-xl overflow-hidden border-2 bg-slate-900 transition-all ${
                     isSelected 
                       ? 'border-teal-400 scale-105 shadow-[0_0_15px_rgba(45,212,191,0.35)]' 
@@ -141,6 +163,7 @@ export default function ProductGrid() {
                   <button
                     key={opt.name}
                     onClick={() => selectColor(opt)}
+                    aria-label={`Select color ${opt.nameAr}`}
                     className={`relative w-12 h-12 rounded-full border-2 transition-all flex items-center justify-center p-0.5 ${
                       isSelected 
                         ? 'border-teal-400 scale-110 shadow-[0_0_12px_rgba(45,212,191,0.4)]' 
@@ -163,7 +186,7 @@ export default function ProductGrid() {
           {/* Sizing Selector */}
           <div className="mb-8">
             <div className="flex justify-between items-center mb-4">
-              <h4 className="text-sm font-semibold text-white tracking-wider">المقاس المطلوب :</h4>
+              <h2 className="text-sm font-semibold text-white tracking-wider">المقاس المطلوب :</h2>
               <button 
                 onClick={() => setIsSizeGuideOpen(true)}
                 className="flex items-center gap-1.5 text-xs text-teal-400 hover:text-teal-300 transition-colors"
@@ -178,6 +201,7 @@ export default function ProductGrid() {
                 <button
                   key={size}
                   onClick={() => setSelectedSize(size)}
+                  aria-label={`Select size ${size}`}
                   className={`w-14 h-14 rounded-2xl border flex flex-col items-center justify-center text-sm font-bold transition-all ${
                     selectedSize === size 
                       ? 'bg-teal-500/20 border-teal-400 text-teal-300 shadow-[0_0_12px_rgba(45,212,191,0.25)] scale-105' 
@@ -209,7 +233,7 @@ export default function ProductGrid() {
 
           {/* Impeccable Specs */}
           <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-            <h4 className="text-xs font-bold text-white/50 mb-4 uppercase tracking-wider">ميزات النسيج النخبوي • Fabric Specifications</h4>
+            <h2 className="text-xs font-bold text-white/50 mb-4 uppercase tracking-wider">ميزات النسيج النخبوي • Fabric Specifications</h2>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {baseProduct.specs?.map((spec, i) => (
                 <li key={i} className="flex items-center gap-3 text-sm text-white/80">

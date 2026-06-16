@@ -37,10 +37,10 @@ export default function FabricTech() {
             className="flex flex-col justify-center animate-fade-in opacity-0"
             style={{ animationFillMode: 'forwards' }}
           >
-            <h2 className="text-sm font-medium text-teal-400 tracking-widest uppercase mb-4">{t('fabric.tag')}</h2>
-            <h3 className="font-display text-4xl md:text-5xl font-bold leading-tight mb-6">
+            <span className="block text-sm font-medium text-teal-400 tracking-widest uppercase mb-4">{t('fabric.tag')}</span>
+            <h2 className="font-display text-4xl md:text-5xl font-bold leading-tight mb-6">
               {t('fabric.title')}
-            </h3>
+            </h2>
             <p className="text-white/70 text-lg mb-8 leading-relaxed">
               {t('fabric.desc')}
             </p>
@@ -65,7 +65,7 @@ export default function FabricTech() {
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-xl font-semibold text-white mb-2">{t(feature.titleKey)}</h4>
+                  <h3 className="text-xl font-semibold text-white mb-2">{t(feature.titleKey)}</h3>
                   <p className="text-white/60 leading-relaxed text-sm">{t(feature.descKey)}</p>
                 </div>
               </div>

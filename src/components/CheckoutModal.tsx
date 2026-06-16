@@ -156,7 +156,7 @@ export default function CheckoutModal() {
                     <div>
                       <div className="flex items-center gap-2 mb-6">
                         <ShoppingBag className="text-teal-400" size={18} />
-                        <h4 className="text-xs font-bold text-white/50 uppercase tracking-widest">مراجعة المشتريات • Order Summary</h4>
+                        <h2 className="text-xs font-bold text-white/50 uppercase tracking-widest">مراجعة المشتريات • Order Summary</h2>
                       </div>
 
                       <div className="space-y-4 max-h-[280px] overflow-y-auto pr-2 no-scrollbar">
@@ -164,7 +164,7 @@ export default function CheckoutModal() {
                           <div key={`${item.id}-${index}`} className="flex gap-4 p-3 rounded-xl bg-white/5 border border-white/5">
                             <img src={item.image} alt={item.name} className="w-12 h-16 object-cover rounded-md" />
                             <div className="flex-1 min-w-0">
-                              <h5 className="text-white text-xs font-bold truncate">{item.name}</h5>
+                              <h3 className="text-white text-xs font-bold truncate">{item.name}</h3>
                               <p className="text-[11px] text-white/60 mt-0.5">اللون: {item.color}</p>
                               <p className="text-[11px] text-white/60">المقاس: {item.size || 'M'}</p>
                               <div className="flex justify-between items-center mt-1">
