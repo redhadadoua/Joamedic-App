@@ -13,6 +13,7 @@ export default defineConfig(() => {
     },
     build: {
       manifest: true,
+      sourcemap: true,
       rollupOptions: {
         output: {
           manualChunks: {

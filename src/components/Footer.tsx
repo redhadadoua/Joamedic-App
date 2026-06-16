@@ -59,9 +59,13 @@ export default function Footer({ onOpenOrderStatus, theme = 'emerald', setTheme 
             {t('foot.desc')}
           </p>
           <div className="flex items-center gap-4 mt-2">
-            {[<Instagram size={18}/>, <Twitter size={18}/>, <Facebook size={18}/>].map((icon, i) => (
-              <a key={i} href="#" className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors">
-                {icon}
+            {[
+              { icon: <Instagram size={18}/>, label: 'Instagram' },
+              { icon: <Twitter size={18}/>, label: 'Twitter' },
+              { icon: <Facebook size={18}/>, label: 'Facebook' }
+            ].map((item, i) => (
+              <a key={i} href="#" aria-label={item.label} className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+                {item.icon}
               </a>
             ))}
           </div>
@@ -69,7 +73,7 @@ export default function Footer({ onOpenOrderStatus, theme = 'emerald', setTheme 
 
         {/* Links Column 1 */}
         <div className="flex flex-col gap-4">
-          <h4 className="font-semibold text-white mb-2">{t('foot.shop')}</h4>
+          <h3 className="font-semibold text-white mb-2">{t('foot.shop')}</h3>
           {['Men\'s Collections', 'Women\'s Collections', 'Lab Coats', 'Underscrubs', 'Gift Cards'].map(link => (
             <button 
               key={link} 
@@ -103,7 +107,7 @@ export default function Footer({ onOpenOrderStatus, theme = 'emerald', setTheme 
 
         {/* Links Column 2 */}
         <div className="flex flex-col gap-4">
-          <h4 className="font-semibold text-white mb-2">{t('foot.company')}</h4>
+          <h3 className="font-semibold text-white mb-2">{t('foot.company')}</h3>
           {['Our Story', 'Fabric Technology', 'Sustainability', 'Careers', 'Contact Us'].map(link => (
             <button 
               key={link} 
@@ -132,7 +136,7 @@ export default function Footer({ onOpenOrderStatus, theme = 'emerald', setTheme 
 
         {/* Newsletter Column */}
         <div className="flex flex-col gap-4">
-          <h4 className="font-semibold text-white mb-2">{t('foot.newsletter.title')}</h4>
+          <h3 className="font-semibold text-white mb-2">{t('foot.newsletter.title')}</h3>
           <p className="text-sm text-white/50 mb-2">{t('foot.newsletter.desc')}</p>
           
           <form onSubmit={handleSubscribe} className="relative mt-2">
@@ -142,10 +146,12 @@ export default function Footer({ onOpenOrderStatus, theme = 'emerald', setTheme 
               onChange={(e) => setEmail(e.target.value)}
               disabled={isSubmitting || isSubscribed}
               placeholder={t('foot.newsletter.placeholder')} 
+              aria-label={t('foot.newsletter.placeholder') || "Email Address"}
               className="w-full bg-white/5 border border-white/10 rounded-full py-3 px-5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-teal-400/50 transition-colors disabled:opacity-50"
             />
             <button 
               type="submit"
+              aria-label="Subscribe to newsletter"
               disabled={isSubmitting || isSubscribed || !email}
               className={`absolute right-1 top-1 bottom-1 w-10 border-0 rounded-full flex items-center justify-center text-white transition-all duration-500 overflow-hidden ${
                 isSubscribed ? 'bg-teal-500 text-emerald-950 scale-100' : 

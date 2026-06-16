@@ -73,11 +73,11 @@ export default function CartDrawer() {
                   </div>
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-3 bg-black/20 rounded-full px-2 py-1 border border-white/10">
-                      <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.size, undefined, item.color)} className="text-white/70 hover:text-white">
+                      <button aria-label="Decrease quantity" onClick={() => updateQuantity(item.id, item.quantity - 1, item.size, undefined, item.color)} className="text-white/70 hover:text-white">
                         <Minus size={14} />
                       </button>
-                      <span className="text-white text-sm w-4 text-center">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.size, undefined, item.color)} className="text-white/70 hover:text-white">
+                      <span className="text-white text-sm w-4 text-center" aria-live="polite">{item.quantity}</span>
+                      <button aria-label="Increase quantity" onClick={() => updateQuantity(item.id, item.quantity + 1, item.size, undefined, item.color)} className="text-white/70 hover:text-white">
                         <Plus size={14} />
                       </button>
                     </div>
