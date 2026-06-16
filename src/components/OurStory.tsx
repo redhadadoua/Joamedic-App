@@ -1,5 +1,5 @@
 import { useLanguage } from '../i18n/LanguageContext';
-import storyImg from '../assets/images/DSC_0615 copie.jpg';
+import storyImg from '../assets/images/DSC_0615 copie.webp';
 
 export default function OurStory() {
   const { t } = useLanguage();

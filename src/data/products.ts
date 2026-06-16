@@ -1,10 +1,10 @@
 import { Product } from '../context/CartContext';
-import img011 from '../assets/images/011.jpg';
-import img012 from '../assets/images/012.jpg';
-import img013 from '../assets/images/013.jpg';
-import imgSami10 from '../assets/images/sami 10.jpg';
-import imgSami10sc from '../assets/images/sami 10sc.jpg';
-import imgSami11 from '../assets/images/sami 11.jpeg';
+import img011 from '../assets/images/011.webp';
+import img012 from '../assets/images/012.webp';
+import img013 from '../assets/images/013.webp';
+import imgSami10 from '../assets/images/sami 10.webp';
+import imgSami10sc from '../assets/images/sami 10sc.webp';
+import imgSami11 from '../assets/images/sami 11.webp';
 
 export const products: Product[] = [
   {

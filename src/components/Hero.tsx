@@ -1,6 +1,6 @@
 import { ArrowRight, Activity, Droplet } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
-import heroImg1 from '../assets/images/sami sdqc.jpg';
+import heroImg1 from '../assets/images/sami sdqc.webp';
 
 export default function Hero() {
   const { t } = useLanguage();
