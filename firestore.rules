@@ -59,7 +59,7 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read: if true;
+      allow get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid) || resource.data.userId == 'guest';
       allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if (isAdmin() || incoming().userId == 'guest' || (isSignedIn() && incoming().userId == request.auth.uid)) && isValidId(orderId) && isValidOrder(incoming());
       allow update: if (isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid)) && isValidId(orderId) && isValidOrder(incoming());
@@ -75,7 +75,7 @@ service cloud.firestore {
     }
 
     match /settings/{settingsId} {
-      allow read, list: if true;
+      allow get, list: if settingsId != 'google_sheets' || isAdmin();
       allow create, update: if isAdmin() && isValidId(settingsId) && 
         (settingsId == 'google_sheets' || isValidSettings(incoming()));
       allow delete: if isAdmin();

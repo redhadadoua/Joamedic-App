@@ -117,6 +117,7 @@ export default function Navbar({ onOpenProfile }: { onOpenProfile?: () => void }
                           </div>
                           <button 
                             className="w-8 h-8 rounded-full bg-teal-500/20 text-teal-300 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-teal-500/40 mt-2"
+                            aria-label={`Add ${product.name} to cart`}
                             onClick={(e) => {
                               e.stopPropagation();
                               addToCart(product);
@@ -190,6 +191,7 @@ export default function Navbar({ onOpenProfile }: { onOpenProfile?: () => void }
         <button 
           className="md:hidden p-2 text-white/80 hover:text-white"
           onClick={() => setIsOpen(!isOpen)}
+          aria-label={isOpen ? "Close menu" : "Open menu"}
         >
           {isOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
