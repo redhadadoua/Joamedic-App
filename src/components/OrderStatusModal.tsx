@@ -143,10 +143,10 @@ export default function OrderStatusModal({ isOpen, onClose }: OrderStatusModalPr
     if (!invoiceRef.current) return;
     
     // Lazy load heavy PDF/Canvas dependencies to reduce bundle size
-    const mHtml2canvas = await import('html2canvas');
+    const mHtml2canvas = await import('html2canvas') as any;
     const html2canvas = mHtml2canvas.default || mHtml2canvas;
     
-    const mJsPDF = await import('jspdf');
+    const mJsPDF = await import('jspdf') as any;
     const jsPDF = mJsPDF.default || mJsPDF;
 
     const element = invoiceRef.current;
