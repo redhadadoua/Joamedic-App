@@ -16,8 +16,22 @@ export default defineConfig(() => {
       sourcemap: false,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom', 'motion', 'lucide-react', 'firebase/app', 'firebase/firestore', 'firebase/auth'],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('firebase')) {
+                return 'vendor-firebase';
+              }
+              if (id.includes('lucide-react')) {
+                return 'vendor-lucide';
+              }
+              if (id.includes('jspdf') || id.includes('html2canvas') || id.includes('fflate')) {
+                return 'vendor-pdf';
+              }
+              if (id.includes('recharts') || id.includes('d3')) {
+                return 'vendor-charts';
+              }
+              return 'vendor-core';
+            }
           },
         },
       },
